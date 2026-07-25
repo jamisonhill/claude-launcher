@@ -60,49 +60,90 @@ you can see the flag before launching.
 
 ## Project discovery
 
-Scanned automatically on every launch, using these rules:
+A folder is listed only when it looks like something you'd actually launch
+Claude in — that is, when it carries a **project marker**: `.git`, `CLAUDE.md`,
+`.claude`, `package.json`, `Package.swift`, `pyproject.toml`, `Cargo.toml`,
+`go.mod`, `Gemfile`, `Makefile`, `docker-compose.yml`, `index.html`, or an
+`.xcodeproj` / `.xcworkspace`.
 
-1. Each configured root is itself launchable.
-2. Every directory one level under a root is launchable.
-3. A directory two levels down is included only if its parent has no project
-   markers of its own — that is, the parent looks like a container. This is what
-   pulls `~/Ai/Personal/apps/prayer` into the list without also listing every
-   subfolder inside a real repo.
+`README.md` is deliberately *not* a marker. Nearly every documentation folder
+has one, so it admits exactly the noise this list exists to filter out.
 
-Project markers are `.git`, `CLAUDE.md`, `package.json`, `.claude`,
-`Package.swift`, `pyproject.toml`, and similar.
+The traversal:
+
+1. Each configured root is always launchable, marker or not — you chose it
+   explicitly, so the app doesn't second-guess it.
+2. One level under a root, a folder is listed if it has a marker.
+3. A folder *without* a marker is treated as a container, and the scan looks one
+   level inside it. That's what surfaces `~/Code/apps/my-app` while ignoring the
+   `apps` folder itself.
+
+Turning on **Show folders without projects** (in Settings or the ⋯ toolbar menu)
+relaxes rules 2 and 3 to list everything — the escape hatch for launching
+somewhere that has no marker file yet.
 
 Hidden folders and common build output (`node_modules`, `.build`, `dist`,
 `venv`, …) are always skipped.
+
+### Group names
+
+Section headings are derived from a project's position *relative to its own
+root*, never from a hardcoded path:
+
+| Root | Project | Heading |
+| ---- | ------- | ------- |
+| `~/Ai/Personal` | `~/Ai/Personal/aquarium` | `PERSONAL` |
+| `~/Ai/Personal` | `~/Ai/Personal/apps/prayer` | `PERSONAL / APPS` |
+| `~/Code` | `~/Code/my-app` | `CODE` |
+
+A nested group holding a single project is folded back into its top-level group,
+so `MHIT / FARGO` with one item becomes part of `MHIT`. A section header costs
+about as much vertical space as a row does, so a header introducing one project
+is pure overhead — and a deep directory tree generates a lot of them.
 
 ## Sidebar
 
 **Favorites.** Hover any project and click the star, or use the context menu,
 the star beside the project name, or ⌘D. Favorites pin to a section at the top
-of the sidebar and can be dragged into whatever order you like. Removing a
-favorite never touches the project itself.
+and can be dragged into whatever order you like.
 
-**Collapsible sections.** Every section — Favorites, Recent, and each folder
-group — has a disclosure triangle and remembers whether you left it open. With
-a hundred projects in the list, collapsing the groups you're not using is the
-difference between a sidebar you scroll and one you scan. The chevron button in
-the footer collapses or expands everything at once (also under the Projects
-menu).
+**Collapsible sections.** Favorites and Recent open by default; folder groups
+start collapsed. Only explicit open/closed choices are stored, so a group
+discovered by a later rescan gets the sensible default rather than inheriting a
+stale entry.
 
-Searching temporarily replaces all of this with a single flat list of matches,
-since sections only get in the way when you already know what you're after.
+**Searching** replaces the sections with a single flat list of matches. Sections
+only get in the way once you know what you're after, and a match hiding inside a
+collapsed group reads as "no such project."
+
+Rows show the folder name alone — the section header already says where it
+lives. The path appears only in search results, where it's constant and actually
+disambiguates. The star's space is always reserved and only its opacity changes,
+because showing and hiding the view itself reflowed the row's text every time
+the pointer crossed it.
+
+Refresh, collapse-all, and list options live in the window toolbar rather than a
+sidebar footer.
 
 ## Configuration
 
-Two JSON files in `~/Library/Application Support/ClaudeLauncher/`:
+Open **Settings** (⌘,) to add or remove project folders with a folder picker,
+toggle the show-all-folders escape hatch, and trigger a rescan.
 
-- **`config.json`** — which roots to scan and what to exclude. Edit by hand,
-  then press ⌘R in the app. Reachable from *File → Show Config File in Finder*.
+Two JSON files back it, in `~/Library/Application Support/ClaudeLauncher/`:
+
+- **`config.json`** — scan roots, exclusions, and the show-all flag. Editable by
+  hand if you prefer; press ⌘R afterward.
 - **`prefs.json`** — remembered model, permission flag, last-used time,
-  favorites, and which sections are collapsed. Managed by the app; safe to
+  favorites, and which sidebar sections are open. Managed by the app; safe to
   delete to reset.
 
-Default roots are `~/Ai/MHIT`, `~/Ai/Personal`, and `~/Ai/Playground`.
+Both decode field-by-field, so a config written by a newer version won't fail to
+load and silently reset your settings on an older one.
+
+There are **no default roots**. The app has no way to know where a given person
+keeps their code, so a fresh install asks rather than guessing at paths that
+exist on only one machine.
 
 ## Keyboard
 
@@ -110,7 +151,9 @@ Default roots are `~/Ai/MHIT`, `~/Ai/Personal`, and `~/Ai/Playground`.
 | --- | ------ |
 | `Return` | Launch the selected project |
 | `⌘D` | Favorite / unfavorite the selected project |
+| `⌘O` | Add a project folder |
 | `⌘R` | Re-scan for projects |
+| `⌘,` | Settings |
 
 ## Files
 
@@ -118,8 +161,9 @@ Default roots are `~/Ai/MHIT`, `~/Ai/Personal`, and `~/Ai/Playground`.
 Package.swift                      SwiftPM manifest
 build.sh                           compiles and assembles the .app bundle
 Sources/ClaudeLauncher/
-  ClaudeLauncherApp.swift          entry point, window, menu commands
+  ClaudeLauncherApp.swift          entry point, window, menus, settings scene
   ContentView.swift                sidebar + launch panel UI
+  SettingsView.swift               ⌘, pane for managing scan roots
   LauncherStore.swift              observable app state
   Launcher.swift                   command building, script writing, Terminal
   ProjectScanner.swift             directory scanning rules

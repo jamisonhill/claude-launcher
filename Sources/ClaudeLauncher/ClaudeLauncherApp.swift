@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// App entry point. A single window, no document model.
+/// App entry point. A single window plus a settings pane.
 @main
 struct ClaudeLauncherApp: App {
     @StateObject private var store = LauncherStore()
@@ -13,17 +13,18 @@ struct ClaudeLauncherApp: App {
         }
         .windowResizability(.contentMinSize)
         .commands {
-            // Replace the useless "New Window" item with the two things this
-            // app actually needs from the menu bar.
+            // Replace the useless "New Window" item with the things this app
+            // actually needs from the menu bar.
             CommandGroup(replacing: .newItem) {
+                Button("Add Project Folder…") {
+                    store.presentAddRootPanel()
+                }
+                .keyboardShortcut("o", modifiers: .command)
+
                 Button("Refresh Projects") {
                     store.refresh()
                 }
                 .keyboardShortcut("r", modifiers: .command)
-
-                Button("Show Config File in Finder") {
-                    store.revealConfigFile()
-                }
             }
 
             CommandMenu("Projects") {
@@ -35,6 +36,13 @@ struct ClaudeLauncherApp: App {
                 .keyboardShortcut("d", modifiers: .command)
                 .disabled(store.selectedProject == nil)
 
+                Button("Reveal in Finder") {
+                    if let project = store.selectedProject {
+                        store.revealProject(project)
+                    }
+                }
+                .disabled(store.selectedProject == nil)
+
                 Divider()
 
                 Button("Collapse All Sections") {
@@ -43,7 +51,19 @@ struct ClaudeLauncherApp: App {
                 Button("Expand All Sections") {
                     store.setAllSectionsExpanded(true)
                 }
+
+                Divider()
+
+                Toggle("Show Folders Without Projects",
+                       isOn: Binding(get: { store.showAllFolders },
+                                     set: { store.setShowAllFolders($0) }))
             }
+        }
+
+        // Gives us the standard ⌘, Settings item for free.
+        Settings {
+            SettingsView()
+                .environmentObject(store)
         }
     }
 }

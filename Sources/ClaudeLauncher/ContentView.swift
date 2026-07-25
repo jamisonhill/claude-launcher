@@ -40,35 +40,50 @@ private struct ProjectSidebar: View {
     @EnvironmentObject private var store: LauncherStore
 
     var body: some View {
-        VStack(spacing: 0) {
-            searchField
-            Divider()
-            projectList
-            Divider()
-            footer
-        }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-                .font(.system(size: 12))
-            TextField("Search projects…", text: $store.searchText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-            if !store.searchText.isEmpty {
-                Button {
-                    store.searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
+        Group {
+            if store.hasNoRoots {
+                NoRootsSidebar()
+            } else {
+                projectList
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        // The system search field replaces a hand-rolled icon + TextField +
+        // clear button, and brings focus handling and ⌘F along with it.
+        .searchable(text: $store.searchText,
+                    placement: .sidebar,
+                    prompt: "Search projects")
+        // Refresh and collapse-all live in the window toolbar rather than a
+        // sidebar footer, which is the native placement and gives the list
+        // back its vertical space.
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    store.setAllSectionsExpanded(store.allSectionsCollapsed)
+                } label: {
+                    Image(systemName: store.allSectionsCollapsed
+                          ? "rectangle.expand.vertical"
+                          : "rectangle.compress.vertical")
+                }
+                .help(store.allSectionsCollapsed
+                      ? "Expand all sections"
+                      : "Collapse all sections")
+                .disabled(store.isSearching || store.hasNoRoots)
+            }
+
+            ToolbarItem {
+                Menu {
+                    Toggle("Show Folders Without Projects",
+                           isOn: Binding(get: { store.showAllFolders },
+                                         set: { store.setShowAllFolders($0) }))
+                    Divider()
+                    Button("Add Folder…") { store.presentAddRootPanel() }
+                    Button("Refresh") { store.refresh() }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .help("Project list options")
+            }
+        }
     }
 
     private var projectList: some View {
@@ -94,7 +109,7 @@ private struct ProjectSidebar: View {
                 if !store.favoriteProjects.isEmpty {
                     Section(isExpanded: store.expansionBinding(for: LauncherStore.favoritesSection)) {
                         ForEach(store.favoriteProjects) { project in
-                            ProjectRow(project: project, showsPath: true)
+                            ProjectRow(project: project, showsPath: false)
                                 .tag(project.path)
                         }
                         .onMove { offsets, destination in
@@ -110,7 +125,7 @@ private struct ProjectSidebar: View {
                 if !store.recentProjects.isEmpty {
                     Section(isExpanded: store.expansionBinding(for: LauncherStore.recentSection)) {
                         ForEach(store.recentProjects) { project in
-                            ProjectRow(project: project, showsPath: true)
+                            ProjectRow(project: project, showsPath: false)
                                 .tag(project.path)
                         }
                     } header: {
@@ -135,62 +150,70 @@ private struct ProjectSidebar: View {
             }
         }
         .listStyle(.sidebar)
-    }
-
-    private var footer: some View {
-        HStack(spacing: 12) {
-            Button {
-                store.refresh()
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-                    .font(.system(size: 11))
+        .overlay {
+            // A search that matches nothing used to leave a blank sidebar with
+            // no explanation of why.
+            if store.isSearching && store.filteredProjects.isEmpty {
+                ContentUnavailableView.search(text: store.searchText)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Re-scan project folders (⌘R)")
-
-            // Collapsing everything makes a 100-project sidebar navigable again.
-            Button {
-                store.setAllSectionsExpanded(store.allSectionsCollapsed)
-            } label: {
-                Image(systemName: store.allSectionsCollapsed
-                      ? "chevron.down.square"
-                      : "chevron.right.square")
-                    .font(.system(size: 12))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help(store.allSectionsCollapsed ? "Expand all sections" : "Collapse all sections")
-            .disabled(store.isSearching)
-
-            Spacer()
-
-            Text("\(store.filteredProjects.count) projects")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
     }
 }
 
-/// Sidebar section heading: name, item count, and a hover-revealed count badge.
+/// Sidebar section heading: optional icon, name, and item count.
 private struct SidebarSectionHeader: View {
     let title: String
     let icon: String?
     let count: Int
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
+            // Only Favorites and Recent carry an icon. Folder groups repeat a
+            // dozen times over, and an icon on each is pure visual frequency.
             if let icon {
                 Image(systemName: icon)
                     .font(.system(size: 9))
+                    .frame(width: 11)
             }
             Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
             Text("\(count)")
                 .foregroundStyle(.tertiary)
                 .padding(.leading, 1)
         }
+        // Long group names truncate in a 240pt sidebar, so the full name has to
+        // be recoverable somewhere.
+        .help(title)
+    }
+}
+
+/// Shown in place of the list on a fresh install, before any folder is chosen.
+private struct NoRootsSidebar: View {
+    @EnvironmentObject private var store: LauncherStore
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "folder.badge.plus")
+                .font(.system(size: 26))
+                .foregroundStyle(.tertiary)
+
+            VStack(spacing: 4) {
+                Text("No folders yet")
+                    .font(.system(size: 13, weight: .medium))
+                Text("Choose a folder that holds your projects.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button("Add Folder…") {
+                store.presentAddRootPanel()
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -230,17 +253,20 @@ private struct ProjectRow: View {
 
             Spacer(minLength: 4)
 
-            if isFavorite || isHovering {
-                Button {
-                    store.toggleFavorite(project)
-                } label: {
-                    Image(systemName: isFavorite ? "star.fill" : "star")
-                        .font(.system(size: 11))
-                        .foregroundStyle(isFavorite ? Color.yellow : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .help(isFavorite ? "Remove from favorites" : "Add to favorites")
+            // The star's space is always reserved and only its opacity changes.
+            // Showing/hiding the view itself reflowed the row's text every time
+            // the pointer crossed it.
+            Button {
+                store.toggleFavorite(project)
+            } label: {
+                Image(systemName: isFavorite ? "star.fill" : "star")
+                    .font(.system(size: 11))
+                    .foregroundStyle(isFavorite ? Color.yellow : Color.secondary)
             }
+            .buttonStyle(.plain)
+            .frame(width: 14)
+            .opacity(isFavorite ? 1 : (isHovering ? 0.55 : 0))
+            .help(isFavorite ? "Remove from favorites" : "Add to favorites")
         }
         .padding(.vertical, 1)
         .contentShape(Rectangle())
@@ -501,17 +527,58 @@ private struct SectionLabel: View {
 // MARK: - Empty state
 
 private struct EmptyStatePanel: View {
+    @EnvironmentObject private var store: LauncherStore
+
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "square.grid.2x2")
+        VStack(spacing: 12) {
+            Image(systemName: icon)
                 .font(.system(size: 34))
                 .foregroundStyle(.tertiary)
-            Text("Select a project")
+
+            Text(title)
                 .font(.system(size: 15, weight: .medium))
-            Text("Pick a folder on the left to start a Claude Code session there.")
+
+            Text(message)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 340)
+
+            // A fresh install has no projects and no obvious next step, so the
+            // way forward is a button rather than a line of documentation.
+            if store.hasNoRoots {
+                Button("Add Folder…") { store.presentAddRootPanel() }
+                    .controlSize(.large)
+                    .padding(.top, 2)
+            } else if store.projects.isEmpty {
+                HStack(spacing: 8) {
+                    Button("Add Another Folder…") { store.presentAddRootPanel() }
+                    Button("Show All Folders") { store.setShowAllFolders(true) }
+                }
+                .controlSize(.large)
+                .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var icon: String {
+        store.hasNoRoots ? "folder.badge.plus"
+            : store.projects.isEmpty ? "magnifyingglass" : "square.grid.2x2"
+    }
+
+    private var title: String {
+        store.hasNoRoots ? "Welcome to Claude Launcher"
+            : store.projects.isEmpty ? "No projects found" : "Select a project"
+    }
+
+    private var message: String {
+        if store.hasNoRoots {
+            return "Choose the folder your projects live in, and they'll show up in the sidebar."
+        }
+        if store.projects.isEmpty {
+            return "Nothing in your folders looks like a project. Claude Launcher looks for markers like .git, CLAUDE.md, or package.json — you can list every folder instead."
+        }
+        return "Pick a folder on the left to start a Claude Code session there."
     }
 }

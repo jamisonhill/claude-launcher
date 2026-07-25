@@ -5,8 +5,8 @@ import SwiftUI
 // MARK: - App state
 //
 // One observable object holds everything the UI reads: the scanned projects,
-// the current selection, and the remembered preferences. SwiftUI redraws
-// automatically whenever a @Published value changes.
+// the current selection, sidebar state, and the remembered preferences.
+// SwiftUI redraws automatically whenever a @Published value changes.
 
 @MainActor
 final class LauncherStore: ObservableObject {
@@ -32,28 +32,51 @@ final class LauncherStore: ObservableObject {
     /// published so the sidebar redraws the moment a star is clicked.
     @Published private(set) var favorites: [String] = []
 
-    /// Sidebar sections currently collapsed. Also a published mirror of prefs.
-    @Published private(set) var collapsedGroups: Set<String> = []
+    /// Explicit open/closed choices per section. Sections absent from this map
+    /// use `defaultExpanded(_:)`.
+    @Published private(set) var sectionExpanded: [String: Bool] = [:]
+
+    /// Folders configured as scan roots, as stored (may contain "~").
+    @Published private(set) var roots: [String] = []
+
+    /// When true, folders without project markers are listed too.
+    @Published private(set) var showAllFolders: Bool = false
 
     private var config: Config
     private var prefs: Prefs
+
+    /// Section headings for the two special sections, kept as constants so
+    /// their expansion state persists under a stable key.
+    static let favoritesSection = "FAVORITES"
+    static let recentSection = "RECENT"
 
     init() {
         self.config = Config.load()
         self.prefs = Prefs.load()
         self.claudePath = Launcher.findClaudeExecutable()
         self.favorites = prefs.favorites
-        self.collapsedGroups = Set(prefs.collapsedGroups)
+        self.sectionExpanded = prefs.sectionExpanded
+        self.roots = config.roots
+        self.showAllFolders = config.showAllFolders
         refresh()
     }
 
-    // MARK: Derived values
+    // MARK: - Derived values
 
     /// The project object matching `selectedPath`, if any.
     var selectedProject: Project? {
         guard let selectedPath else { return nil }
         return projects.first { $0.path == selectedPath }
     }
+
+    /// True when the search box has content, which collapses the sidebar down
+    /// to a single flat list of matches.
+    var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// True on a fresh install, before any scan root has been chosen.
+    var hasNoRoots: Bool { roots.isEmpty }
 
     /// Projects matching the search box. An empty search returns everything.
     var filteredProjects: [Project] {
@@ -76,7 +99,7 @@ final class LauncherStore: ObservableObject {
     /// Up to five most recently launched projects, newest first. Hidden while
     /// searching so the search results aren't duplicated at the top.
     var recentProjects: [Project] {
-        guard isSearching == false else { return [] }
+        guard !isSearching else { return [] }
         return prefs.lastUsed
             .sorted { $0.value > $1.value }
             .prefix(5)
@@ -86,16 +109,10 @@ final class LauncherStore: ObservableObject {
     /// Pinned projects, in the order they were favorited. Like Recent, hidden
     /// during a search so results aren't listed twice.
     var favoriteProjects: [Project] {
-        guard isSearching == false else { return [] }
+        guard !isSearching else { return [] }
         return favorites.compactMap { path in
             projects.first { $0.path == path }
         }
-    }
-
-    /// True when the search box has content, which collapses the sidebar down
-    /// to a single flat list of matches.
-    var isSearching: Bool {
-        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     /// The command line that Launch will run, shown live in the UI.
@@ -107,7 +124,7 @@ final class LauncherStore: ObservableObject {
                                        claudePath: claudePath)
     }
 
-    /// Human-readable "2h ago" style stamp for the detail pane.
+    /// Human-readable "2 hours ago" style stamp for the detail pane.
     func lastUsedDescription(for project: Project) -> String? {
         guard let date = prefs.lastUsed[project.path] else { return nil }
         let formatter = RelativeDateTimeFormatter()
@@ -115,7 +132,7 @@ final class LauncherStore: ObservableObject {
         return "Last opened " + formatter.localizedString(for: date, relativeTo: Date())
     }
 
-    // MARK: Actions
+    // MARK: - Scanning
 
     /// Re-scans the configured roots. Keeps the current selection if it survived.
     func refresh() {
@@ -132,7 +149,41 @@ final class LauncherStore: ObservableObject {
         }
     }
 
-    // MARK: Favorites
+    // MARK: - Scan roots
+
+    /// Adds a folder to scan, ignoring duplicates, and rescans.
+    func addRoot(_ url: URL) {
+        let path = abbreviatingHome(url.path)
+        guard !roots.contains(path) else { return }
+        roots.append(path)
+        config.roots = roots
+        config.save()
+        refresh()
+    }
+
+    func removeRoot(_ path: String) {
+        roots.removeAll { $0 == path }
+        config.roots = roots
+        config.save()
+        refresh()
+    }
+
+    /// Toggles the "list folders without project markers" escape hatch.
+    func setShowAllFolders(_ enabled: Bool) {
+        showAllFolders = enabled
+        config.showAllFolders = enabled
+        config.save()
+        refresh()
+    }
+
+    /// Stores roots with a leading "~" so a config file stays portable between
+    /// machines and user accounts.
+    private func abbreviatingHome(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        return path.hasPrefix(home) ? "~" + String(path.dropFirst(home.count)) : path
+    }
+
+    // MARK: - Favorites
 
     func isFavorite(_ project: Project) -> Bool {
         favorites.contains(project.path)
@@ -157,58 +208,64 @@ final class LauncherStore: ObservableObject {
         prefs.save()
     }
 
-    // MARK: Section collapsing
+    /// Pins or unpins whatever is currently selected (⌘D from the menu bar).
+    func toggleFavoriteForSelection() {
+        guard let project = selectedProject else { return }
+        toggleFavorite(project)
+    }
 
-    /// A binding for `Section(isExpanded:)`. We store the *collapsed* set, so a
-    /// group nobody has touched reads as expanded.
-    func expansionBinding(for group: String) -> Binding<Bool> {
+    // MARK: - Section collapsing
+
+    /// Favorites and Recent open by default; folder groups start closed.
+    ///
+    /// Folder groups are the bulk of the sidebar, and starting them collapsed
+    /// is what keeps a hundred-project install readable on launch.
+    func defaultExpanded(_ section: String) -> Bool {
+        section == Self.favoritesSection || section == Self.recentSection
+    }
+
+    func isExpanded(_ section: String) -> Bool {
+        sectionExpanded[section] ?? defaultExpanded(section)
+    }
+
+    /// A binding for `Section(isExpanded:)`.
+    func expansionBinding(for section: String) -> Binding<Bool> {
         Binding(
-            get: { [weak self] in
-                guard let self else { return true }
-                return !self.collapsedGroups.contains(group)
-            },
+            get: { [weak self] in self?.isExpanded(section) ?? true },
             set: { [weak self] isExpanded in
                 guard let self else { return }
-                if isExpanded {
-                    self.collapsedGroups.remove(group)
-                } else {
-                    self.collapsedGroups.insert(group)
-                }
-                self.prefs.collapsedGroups = Array(self.collapsedGroups)
+                self.sectionExpanded[section] = isExpanded
+                self.prefs.sectionExpanded = self.sectionExpanded
                 self.prefs.save()
             }
         )
     }
 
-    /// True when every visible section is collapsed — drives the footer button's
-    /// icon and whether it expands or collapses on the next click.
-    var allSectionsCollapsed: Bool {
-        var visible = Set(groupedProjects.map(\.group))
-        if !favoriteProjects.isEmpty { visible.insert(Self.favoritesSection) }
-        if !recentProjects.isEmpty { visible.insert(Self.recentSection) }
-        return !visible.isEmpty && visible.isSubset(of: collapsedGroups)
+    /// Every section currently visible in the sidebar.
+    private var visibleSections: [String] {
+        var sections = groupedProjects.map(\.group)
+        if !favoriteProjects.isEmpty { sections.append(Self.favoritesSection) }
+        if !recentProjects.isEmpty { sections.append(Self.recentSection) }
+        return sections
     }
 
-    /// Collapses or expands everything at once, from the sidebar footer.
+    /// True when every visible section is closed — drives the toolbar button's
+    /// icon and whether the next click expands or collapses.
+    var allSectionsCollapsed: Bool {
+        let sections = visibleSections
+        return !sections.isEmpty && sections.allSatisfy { !isExpanded($0) }
+    }
+
+    /// Collapses or expands everything at once.
     func setAllSectionsExpanded(_ expanded: Bool) {
-        if expanded {
-            collapsedGroups = []
-        } else {
-            var all = Set(groupedProjects.map(\.group))
-            all.insert(Self.favoritesSection)
-            all.insert(Self.recentSection)
-            collapsedGroups = all
+        for section in visibleSections {
+            sectionExpanded[section] = expanded
         }
-        prefs.collapsedGroups = Array(collapsedGroups)
+        prefs.sectionExpanded = sectionExpanded
         prefs.save()
     }
 
-    /// Section headings for the two special sections, kept as constants so the
-    /// collapse state persists under a stable key.
-    static let favoritesSection = "FAVORITES"
-    static let recentSection = "RECENT"
-
-    // MARK: Selection
+    // MARK: - Selection
 
     /// Selects a project and restores whatever settings were used there last.
     func select(_ project: Project) {
@@ -217,6 +274,8 @@ final class LauncherStore: ObservableObject {
         skipPermissions = prefs.skipPermissions[project.path] ?? Prefs.defaultSkipPermissions
         lastLaunchNote = nil
     }
+
+    // MARK: - Launching
 
     /// Opens Terminal with Claude Code running, then remembers the choices.
     func launch() {
@@ -240,8 +299,11 @@ final class LauncherStore: ObservableObject {
         }
     }
 
-    /// Opens the config file so roots and exclusions can be edited by hand.
+    // MARK: - Finder
+
+    /// Opens the config file for anyone who'd rather edit JSON than use ⌘,.
     func revealConfigFile() {
+        config.save()   // make sure the file exists before pointing Finder at it
         NSWorkspace.shared.activateFileViewerSelecting([AppPaths.configFile])
     }
 
@@ -251,9 +313,18 @@ final class LauncherStore: ObservableObject {
             [URL(fileURLWithPath: project.path)])
     }
 
-    /// Pins or unpins whatever is currently selected (⌘D from the menu bar).
-    func toggleFavoriteForSelection() {
-        guard let project = selectedProject else { return }
-        toggleFavorite(project)
+    /// Presents a folder chooser and adds the result as a scan root.
+    func presentAddRootPanel() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Add Folder"
+        panel.message = "Choose a folder that contains your projects."
+
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            addRoot(url)
+        }
     }
 }
