@@ -25,6 +25,25 @@ struct ClaudeLauncherApp: App {
                     store.revealConfigFile()
                 }
             }
+
+            CommandMenu("Projects") {
+                Button(store.selectedProject.map { store.isFavorite($0) } == true
+                       ? "Remove from Favorites"
+                       : "Add to Favorites") {
+                    store.toggleFavoriteForSelection()
+                }
+                .keyboardShortcut("d", modifiers: .command)
+                .disabled(store.selectedProject == nil)
+
+                Divider()
+
+                Button("Collapse All Sections") {
+                    store.setAllSectionsExpanded(false)
+                }
+                Button("Expand All Sections") {
+                    store.setAllSectionsExpanded(true)
+                }
+            }
         }
     }
 }

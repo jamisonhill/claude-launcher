@@ -80,6 +80,14 @@ struct Prefs: Codable {
     /// project path -> when it was last launched (drives the Recent section)
     var lastUsed: [String: Date] = [:]
 
+    /// Paths pinned to the Favorites section, in the order they were added.
+    var favorites: [String] = []
+
+    /// Sidebar section headings the user has collapsed. Stored as the
+    /// collapsed set (rather than the expanded set) so a brand-new group
+    /// shows up expanded by default.
+    var collapsedGroups: [String] = []
+
     /// You chose "on by default", so an unseen project starts with the flag set.
     static let defaultSkipPermissions = true
 

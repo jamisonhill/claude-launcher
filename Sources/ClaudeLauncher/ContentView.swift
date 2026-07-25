@@ -83,20 +83,53 @@ private struct ProjectSidebar: View {
                 }
             }
         )) {
-            if !store.recentProjects.isEmpty {
-                Section("RECENT") {
-                    ForEach(store.recentProjects) { project in
-                        ProjectRow(project: project, showsPath: true)
-                            .tag(project.path)
+            // While searching we show one flat list of matches — sections and
+            // their collapse state would just get in the way of finding things.
+            if store.isSearching {
+                ForEach(store.filteredProjects) { project in
+                    ProjectRow(project: project, showsPath: true)
+                        .tag(project.path)
+                }
+            } else {
+                if !store.favoriteProjects.isEmpty {
+                    Section(isExpanded: store.expansionBinding(for: LauncherStore.favoritesSection)) {
+                        ForEach(store.favoriteProjects) { project in
+                            ProjectRow(project: project, showsPath: true)
+                                .tag(project.path)
+                        }
+                        .onMove { offsets, destination in
+                            store.moveFavorites(fromOffsets: offsets, toOffset: destination)
+                        }
+                    } header: {
+                        SidebarSectionHeader(title: LauncherStore.favoritesSection,
+                                             icon: "star.fill",
+                                             count: store.favoriteProjects.count)
                     }
                 }
-            }
 
-            ForEach(store.groupedProjects, id: \.group) { section in
-                Section(section.group) {
-                    ForEach(section.projects) { project in
-                        ProjectRow(project: project, showsPath: false)
-                            .tag(project.path)
+                if !store.recentProjects.isEmpty {
+                    Section(isExpanded: store.expansionBinding(for: LauncherStore.recentSection)) {
+                        ForEach(store.recentProjects) { project in
+                            ProjectRow(project: project, showsPath: true)
+                                .tag(project.path)
+                        }
+                    } header: {
+                        SidebarSectionHeader(title: LauncherStore.recentSection,
+                                             icon: "clock",
+                                             count: store.recentProjects.count)
+                    }
+                }
+
+                ForEach(store.groupedProjects, id: \.group) { section in
+                    Section(isExpanded: store.expansionBinding(for: section.group)) {
+                        ForEach(section.projects) { project in
+                            ProjectRow(project: project, showsPath: false)
+                                .tag(project.path)
+                        }
+                    } header: {
+                        SidebarSectionHeader(title: section.group,
+                                             icon: nil,
+                                             count: section.projects.count)
                     }
                 }
             }
@@ -105,7 +138,7 @@ private struct ProjectSidebar: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Button {
                 store.refresh()
             } label: {
@@ -115,6 +148,20 @@ private struct ProjectSidebar: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .help("Re-scan project folders (⌘R)")
+
+            // Collapsing everything makes a 100-project sidebar navigable again.
+            Button {
+                store.setAllSectionsExpanded(store.allSectionsCollapsed)
+            } label: {
+                Image(systemName: store.allSectionsCollapsed
+                      ? "chevron.down.square"
+                      : "chevron.right.square")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(store.allSectionsCollapsed ? "Expand all sections" : "Collapse all sections")
+            .disabled(store.isSearching)
 
             Spacer()
 
@@ -127,10 +174,38 @@ private struct ProjectSidebar: View {
     }
 }
 
-/// One row in the sidebar.
+/// Sidebar section heading: name, item count, and a hover-revealed count badge.
+private struct SidebarSectionHeader: View {
+    let title: String
+    let icon: String?
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 9))
+            }
+            Text(title)
+            Text("\(count)")
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 1)
+        }
+    }
+}
+
+/// One row in the sidebar, with a star for pinning.
+///
+/// The star only appears on hover or when the project is already favorited, so
+/// a hundred-row sidebar isn't a wall of empty outlines.
 private struct ProjectRow: View {
+    @EnvironmentObject private var store: LauncherStore
     let project: Project
     let showsPath: Bool
+
+    @State private var isHovering = false
+
+    private var isFavorite: Bool { store.isFavorite(project) }
 
     var body: some View {
         HStack(spacing: 7) {
@@ -152,8 +227,33 @@ private struct ProjectRow: View {
                         .truncationMode(.head)
                 }
             }
+
+            Spacer(minLength: 4)
+
+            if isFavorite || isHovering {
+                Button {
+                    store.toggleFavorite(project)
+                } label: {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 11))
+                        .foregroundStyle(isFavorite ? Color.yellow : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(isFavorite ? "Remove from favorites" : "Add to favorites")
+            }
         }
         .padding(.vertical, 1)
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .contextMenu {
+            Button(isFavorite ? "Remove from Favorites" : "Add to Favorites") {
+                store.toggleFavorite(project)
+            }
+            Divider()
+            Button("Reveal in Finder") {
+                store.revealProject(project)
+            }
+        }
     }
 }
 
@@ -182,8 +282,23 @@ private struct LaunchPanel: View {
     private var header: some View {
         if let project = store.selectedProject {
             VStack(alignment: .leading, spacing: 5) {
-                Text(project.name)
-                    .font(.system(size: 22, weight: .semibold))
+                HStack(spacing: 9) {
+                    Text(project.name)
+                        .font(.system(size: 22, weight: .semibold))
+
+                    Button {
+                        store.toggleFavorite(project)
+                    } label: {
+                        Image(systemName: store.isFavorite(project) ? "star.fill" : "star")
+                            .font(.system(size: 15))
+                            .foregroundStyle(store.isFavorite(project)
+                                             ? Color.yellow : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(store.isFavorite(project)
+                          ? "Remove from favorites (⌘D)"
+                          : "Add to favorites (⌘D)")
+                }
 
                 Text(project.displayPath)
                     .font(.system(size: 12, design: .monospaced))

@@ -13,7 +13,8 @@ Local-only. Not signed for distribution, not intended to leave this machine.
 ./build.sh --install    # also copies it to /Applications
 ```
 
-Requires the Swift toolchain that ships with Xcode. No other dependencies.
+Requires macOS 14+ and the Swift toolchain that ships with Xcode. No other
+dependencies.
 
 ## How it works
 
@@ -74,14 +75,32 @@ Project markers are `.git`, `CLAUDE.md`, `package.json`, `.claude`,
 Hidden folders and common build output (`node_modules`, `.build`, `dist`,
 `venv`, …) are always skipped.
 
+## Sidebar
+
+**Favorites.** Hover any project and click the star, or use the context menu,
+the star beside the project name, or ⌘D. Favorites pin to a section at the top
+of the sidebar and can be dragged into whatever order you like. Removing a
+favorite never touches the project itself.
+
+**Collapsible sections.** Every section — Favorites, Recent, and each folder
+group — has a disclosure triangle and remembers whether you left it open. With
+a hundred projects in the list, collapsing the groups you're not using is the
+difference between a sidebar you scroll and one you scan. The chevron button in
+the footer collapses or expands everything at once (also under the Projects
+menu).
+
+Searching temporarily replaces all of this with a single flat list of matches,
+since sections only get in the way when you already know what you're after.
+
 ## Configuration
 
 Two JSON files in `~/Library/Application Support/ClaudeLauncher/`:
 
 - **`config.json`** — which roots to scan and what to exclude. Edit by hand,
   then press ⌘R in the app. Reachable from *File → Show Config File in Finder*.
-- **`prefs.json`** — remembered model, permission flag, and last-used time per
-  project. Managed by the app; safe to delete to reset.
+- **`prefs.json`** — remembered model, permission flag, last-used time,
+  favorites, and which sections are collapsed. Managed by the app; safe to
+  delete to reset.
 
 Default roots are `~/Ai/MHIT`, `~/Ai/Personal`, and `~/Ai/Playground`.
 
@@ -90,6 +109,7 @@ Default roots are `~/Ai/MHIT`, `~/Ai/Personal`, and `~/Ai/Playground`.
 | Key | Action |
 | --- | ------ |
 | `Return` | Launch the selected project |
+| `⌘D` | Favorite / unfavorite the selected project |
 | `⌘R` | Re-scan for projects |
 
 ## Files
