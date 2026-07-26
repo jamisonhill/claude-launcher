@@ -1,9 +1,9 @@
 # Resume: Claude Launcher
 
-**Paused:** 2026-07-25, evening
-**Reason:** v1.0.0 shipped, verified end to end, and installable via Homebrew.
-Clean stopping point — nothing is broken or half-finished.
-**Phase:** 5 of 5 complete. Phase 6 (optional polish) not started.
+**Paused:** 2026-07-25, late evening (updated after shipping v1.0.1)
+**Reason:** v1.0.1 shipped with an app icon, installed and verified. Clean
+stopping point — nothing is broken or half-finished.
+**Phase:** 5 complete. Phase 6 (optional polish) started: icon done.
 
 ---
 
@@ -38,12 +38,10 @@ why the checkboxes exist. Threshold is one comparison in `ProjectScanner`.
 
 ## Next action (pick one — all optional)
 
-1. **App icon.** The most visible gap now that it's publicly installable; it
-   ships with the generic blank document icon.
-2. **`-n/--name`.** Sets the session name *and* the Terminal window title.
+1. **`-n/--name`.** Sets the session name *and* the Terminal window title.
    Would compound nicely with the per-project colour themes.
-3. Session control (`--continue` / `--resume`), previously declined.
-4. Tests around `ProjectScanner` — the container heuristic is the part most
+2. Session control (`--continue` / `--resume`), previously declined.
+3. Tests around `ProjectScanner` — the container heuristic is the part most
    likely to be quietly wrong on someone else's folder layout.
 
 ## To resume

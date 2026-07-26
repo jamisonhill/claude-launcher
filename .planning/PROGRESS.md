@@ -3,7 +3,7 @@
 A native macOS GUI for starting Claude Code sessions in Terminal.
 Repo: https://github.com/jamisonhill/claude-launcher (public, MIT)
 
-**Status: v1.0.0 shipped and installable via Homebrew.**
+**Status: v1.0.1 shipped, installed via Homebrew, with an app icon.**
 
 ---
 
@@ -43,9 +43,11 @@ Repo: https://github.com/jamisonhill/claude-launcher (public, MIT)
 - [x] v1.0.0 notarized (Accepted), published, **installed from brew and
       launched with no Gatekeeper prompt**
 
-## Phase 6: Optional polish [NOT STARTED] ← NEXT
-- [ ] **App icon** — the app currently ships with the generic blank icon
-- [ ] `-n/--name` flag (sets session name *and* Terminal window title —
+## Phase 6: Optional polish [IN PROGRESS]
+- [x] **App icon** — `Icon/make-icon.swift`, regenerated on every build.
+      Each size drawn natively; downscaling 1024px art turned 16px into a
+      smudge. Shipped as v1.0.1.
+- [ ] ← NEXT `-n/--name` flag (sets session name *and* Terminal window title —
       pairs naturally with the colour themes)
 - [ ] Session control: `--continue` / `--resume` / `--fork-session`
 - [ ] Advanced disclosure: worktree, add-dir, agent, ide, safe-mode, verbose
