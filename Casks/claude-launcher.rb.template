@@ -8,7 +8,7 @@ cask "claude-launcher" do
   homepage "https://github.com/jamisonhill/claude-launcher"
 
   # Section(isExpanded:), which drives the collapsible sidebar, is macOS 14+.
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "ClaudeLauncher.app"
 
