@@ -1,10 +1,10 @@
 # Claude Launcher
 
-A small native macOS app for starting Claude Code sessions. Pick a project,
-pick a model, hit Launch — a new Terminal window opens in that folder with
-Claude already running.
+A native macOS app for starting Claude Code sessions. Pick a project, set the
+options, hit Launch — a Terminal window opens in that folder, in the colour
+scheme you chose, with Claude already running.
 
-Local-only. Not signed for distribution, not intended to leave this machine.
+Local-only. Not signed for distribution.
 
 ## Build
 
@@ -16,143 +16,136 @@ Local-only. Not signed for distribution, not intended to leave this machine.
 Requires macOS 14+ and the Swift toolchain that ships with Xcode. No other
 dependencies.
 
-## How it works
+## Setup
 
-Launch writes a short `.command` shell script and asks Terminal.app to open it.
-macOS runs `.command` files in a fresh Terminal window, which gets us the new
-window, the working directory, and the running process in one step.
+On first run the app asks for the folder your projects live in, then lists
+**everything** inside it with checkboxes. You tick which folders are real
+projects.
 
-The script looks like this:
+That inversion is deliberate. An earlier version decided for you by looking for
+marker files, and it silently hid `MHIT/DATA-ANALYTICS/exec-dashboard` — a real
+project full of docs and schemas, but with no `.git` or `package.json`. There
+was no way to discover it was missing. Markers now only decide which boxes start
+**ticked**; they never decide what's **visible**.
 
-```zsh
-#!/bin/zsh -l
-cd '/Users/jamisonhill/Ai/Personal/apps/prayer' || exit 1
-clear
-exec '/Users/jamisonhill/.local/bin/claude' --model claude-opus-5 --dangerously-skip-permissions
-```
+Re-run the picker any time with **File → Choose Projects…** (⇧⌘O). Your existing
+selection comes back pre-ticked.
 
-Two deliberate choices in there:
+### How boxes get pre-ticked
 
-- **No AppleScript.** Driving Terminal with Apple Events needs an Automation
-  permission grant tied to the app's code signature. Because this app is
-  ad-hoc signed, every rebuild would change that identity and re-trigger the
-  permission prompt. Opening a file has no such requirement.
-- **`exec`** replaces the login shell with Claude, so quitting Claude closes
-  the window instead of leaving you in a stray subshell.
+- A folder carrying a marker (`.git`, `CLAUDE.md`, `package.json`,
+  `Package.swift`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `Gemfile`,
+  `Makefile`, `docker-compose.yml`, `index.html`, `.xcodeproj`) is ticked, and
+  the scan stops there — a project's subfolders are parts of it, not siblings.
+- A folder *without* a marker is judged by how many of its children have one:
 
-## Models
+  | Marker-bearing children | Read as | Example |
+  | --- | --- | --- |
+  | 2 or more | a container of projects | `~/Ai/Personal/apps` (11) |
+  | exactly 1 | the project itself | `exec-dashboard` |
+  | 0 | neither; left unticked | `MHIT/governance` |
 
-| Button | `--model` value |
-| ------ | --------------- |
-| Opus   | `claude-opus-5` |
-| Fable  | `claude-fable-5` |
-| Sonnet | `claude-sonnet-5` |
-| Haiku  | `claude-haiku-4-5-20251001` |
-
-To track a new model release, edit `modelID` in `Sources/ClaudeLauncher/Models.swift`.
-
-## Skip permission prompts
-
-The toggle adds `--dangerously-skip-permissions`, which lets Claude run commands
-and edit files without asking. **It defaults to on**, and the choice is
-remembered per project. The exact command is always shown under "Will run" so
-you can see the flag before launching.
-
-## Project discovery
-
-A folder is listed only when it looks like something you'd actually launch
-Claude in — that is, when it carries a **project marker**: `.git`, `CLAUDE.md`,
-`.claude`, `package.json`, `Package.swift`, `pyproject.toml`, `Cargo.toml`,
-`go.mod`, `Gemfile`, `Makefile`, `docker-compose.yml`, `index.html`, or an
-`.xcodeproj` / `.xcworkspace`.
-
-`README.md` is deliberately *not* a marker. Nearly every documentation folder
-has one, so it admits exactly the noise this list exists to filter out.
-
-The traversal:
-
-1. Each configured root is always launchable, marker or not — you chose it
-   explicitly, so the app doesn't second-guess it.
-2. One level under a root, a folder is listed if it has a marker.
-3. A folder *without* a marker is treated as a container, and the scan looks one
-   level inside it. That's what surfaces `~/Code/apps/my-app` while ignoring the
-   `apps` folder itself.
-
-Turning on **Show folders without projects** (in Settings or the ⋯ toolbar menu)
-relaxes rules 2 and 3 to list everything — the escape hatch for launching
-somewhere that has no marker file yet.
-
-Hidden folders and common build output (`node_modules`, `.build`, `dist`,
-`venv`, …) are always skipped.
-
-### Group names
-
-Section headings are derived from a project's position *relative to its own
-root*, never from a hardcoded path:
-
-| Root | Project | Heading |
-| ---- | ------- | ------- |
-| `~/Ai/Personal` | `~/Ai/Personal/aquarium` | `PERSONAL` |
-| `~/Ai/Personal` | `~/Ai/Personal/apps/prayer` | `PERSONAL / APPS` |
-| `~/Code` | `~/Code/my-app` | `CODE` |
-
-A nested group holding a single project is folded back into its top-level group,
-so `MHIT / FARGO` with one item becomes part of `MHIT`. A section header costs
-about as much vertical space as a row does, so a header introducing one project
-is pure overhead — and a deep directory tree generates a lot of them.
+This is a guess and it will sometimes be wrong — `ops-dashboard` has two
+marker-bearing children and so reads as a container. That's what the checkboxes
+are for. Nothing is ever hidden, so a wrong guess costs one click.
 
 ## Sidebar
 
-**Favorites.** Hover any project and click the star, or use the context menu,
-the star beside the project name, or ⌘D. Favorites pin to a section at the top
-and can be dragged into whatever order you like.
+Sections are **yours**: create them, name them, drag projects between them.
+Anything unfiled lands in **Unsorted**, so a newly added project can never go
+missing. Deleting a section returns its projects to Unsorted rather than
+removing them from the library.
 
-**Collapsible sections.** Favorites and Recent open by default; folder groups
-start collapsed. Only explicit open/closed choices are stored, so a group
-discovered by a later rescan gets the sensible default rather than inheriting a
-stale entry.
+Earlier versions derived sections from the folder tree. Those headings made
+sense on one machine and nonsense on another, and they couldn't express a
+grouping that cuts across directories.
 
-**Searching** replaces the sections with a single flat list of matches. Sections
-only get in the way once you know what you're after, and a match hiding inside a
-collapsed group reads as "no such project."
+- **Favorites** — star a row on hover, or use ⌘D, the context menu, or the star
+  by the project name. Drag to reorder.
+- **Recent** — the last five launched.
+- **Search** replaces the sections with a flat list of matches, since a match
+  hidden inside a collapsed section reads as "no such project".
 
-Rows show the folder name alone — the section header already says where it
-lives. The path appears only in search results, where it's constant and actually
-disambiguates. The star's space is always reserved and only its opacity changes,
-because showing and hiding the view itself reflowed the row's text every time
-the pointer crossed it.
+Favorites and Recent open by default; your own sections start collapsed.
 
-Refresh, collapse-all, and list options live in the window toolbar rather than a
-sidebar footer.
+## Launch options
+
+| Control | Flag |
+| --- | --- |
+| Model | `--model claude-opus-5` / `-fable-5` / `-sonnet-5` / `claude-haiku-4-5-20251001` |
+| Permissions | `--permission-mode bypassPermissions \| acceptEdits \| plan \| dontAsk \| auto \| manual` |
+| Effort | `--effort low \| medium \| high \| xhigh \| max` (omitted entirely when set to Default) |
+
+Permissions defaults to **Bypass All**, which is exactly what the old
+"skip permissions" toggle did — `--dangerously-skip-permissions` and
+`--permission-mode bypassPermissions` are the same thing. Exposing the real
+modes makes `plan` and `acceptEdits` reachable at launch.
+
+Every choice is remembered per project, and the exact command is shown under
+**Will run** before you launch.
+
+## Terminal themes
+
+Pick a colour scheme per project so concurrent sessions are tellable apart at a
+glance. The window is also titled after the project.
+
+Themes are read from the profiles already installed in Terminal (Basic, Grass,
+Homebrew, Novel, Ocean, Pro, plus anything custom), so the palette matches what
+you already know and stays correct on a machine with a different set.
+
+**How it works.** Terminal reads `.terminal` files — plists describing a window
+profile. A profile can carry a `CommandString`, so opening one gets us a new
+window with the right colours *and* our launch script, with no Apple Events
+involved. Same reason the plain path avoids AppleScript: Automation permission
+is tied to the code signature, and an ad-hoc signed app re-prompts on every
+rebuild.
+
+**Caveat worth knowing.** Opening a `.terminal` file *installs* it as a Terminal
+profile. The app emits a small fixed set named `Claude — <theme>` and rewrites
+those in place, rather than one throwaway profile per launch. Your own profiles
+are read but never modified. Remove them in Terminal → Settings → Profiles.
+
+`CommandString` points at the generated script rather than inlining shell
+syntax; inline commands have to survive both XML escaping and Terminal's own
+parsing, and quoted paths get mangled in the process.
+
+## How launching works
+
+```zsh
+#!/bin/zsh -l
+cd '/Users/you/Ai/MHIT/DATA-ANALYTICS/exec-dashboard' || exit 1
+clear
+exec '/Users/you/.local/bin/claude' '--model' 'claude-opus-5' '--permission-mode' 'bypassPermissions'
+```
+
+`-l` gives the session your normal login environment. `exec` replaces the shell
+with Claude, so quitting Claude closes the window instead of leaving a stray
+subshell. The `claude` binary is resolved up front, so a missing CLI produces a
+clear dialog instead of a window that flashes "command not found" and vanishes.
 
 ## Configuration
 
-Open **Settings** (⌘,) to add or remove project folders with a folder picker,
-toggle the show-all-folders escape hatch, and trigger a rescan.
+**Settings** (⌘,) manages your main folders and re-runs the project picker.
 
-Two JSON files back it, in `~/Library/Application Support/ClaudeLauncher/`:
+Three JSON files in `~/Library/Application Support/ClaudeLauncher/`:
 
-- **`config.json`** — scan roots, exclusions, and the show-all flag. Editable by
-  hand if you prefer; press ⌘R afterward.
-- **`prefs.json`** — remembered model, permission flag, last-used time,
-  favorites, and which sidebar sections are open. Managed by the app; safe to
-  delete to reset.
+- **`config.json`** — main folders to search, and exclusions.
+- **`library.json`** — your curated projects and your sections.
+- **`prefs.json`** — per-project model, permission mode, effort, theme,
+  favorites, recency, and which sections are open.
 
-Both decode field-by-field, so a config written by a newer version won't fail to
-load and silently reset your settings on an older one.
-
-There are **no default roots**. The app has no way to know where a given person
-keeps their code, so a fresh install asks rather than guessing at paths that
-exist on only one machine.
+All three decode field-by-field, so a file written by a newer version can't fail
+to load and silently reset your setup. There are no default folders: the app has
+no way to know where a given person keeps their code.
 
 ## Keyboard
 
 | Key | Action |
 | --- | ------ |
 | `Return` | Launch the selected project |
-| `⌘D` | Favorite / unfavorite the selected project |
-| `⌘O` | Add a project folder |
-| `⌘R` | Re-scan for projects |
+| `⌘D` | Favorite / unfavorite |
+| `⌘O` | Add a main folder |
+| `⇧⌘O` | Choose projects |
 | `⌘,` | Settings |
 
 ## Files
@@ -162,11 +155,13 @@ Package.swift                      SwiftPM manifest
 build.sh                           compiles and assembles the .app bundle
 Sources/ClaudeLauncher/
   ClaudeLauncherApp.swift          entry point, window, menus, settings scene
-  ContentView.swift                sidebar + launch panel UI
-  SettingsView.swift               ⌘, pane for managing scan roots
+  ContentView.swift                sidebar + launch panel
+  SetupSheet.swift                 the project-picker sheet
+  SettingsView.swift               ⌘, pane
   LauncherStore.swift              observable app state
   Launcher.swift                   command building, script writing, Terminal
-  ProjectScanner.swift             directory scanning rules
-  Prefs.swift                      config.json / prefs.json models
-  Models.swift                     ClaudeModel enum, Project struct
+  TerminalThemes.swift             reads Terminal profiles, writes .terminal
+  ProjectScanner.swift             candidate discovery
+  Prefs.swift                      config / library / prefs models
+  Models.swift                     models, flags, Project, sections
 ```

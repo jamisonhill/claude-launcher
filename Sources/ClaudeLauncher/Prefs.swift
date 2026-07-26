@@ -2,32 +2,31 @@ import Foundation
 
 // MARK: - On-disk state
 //
-// Two JSON files live in ~/Library/Application Support/ClaudeLauncher/ :
+// Three JSON files in ~/Library/Application Support/ClaudeLauncher/ :
 //
-//   config.json  – which folders to scan (managed from the Settings window)
-//   prefs.json   – remembered per-project choices and sidebar state
+//   config.json   – which folders to scan for candidates
+//   library.json  – the curated projects and the user's sidebar sections
+//   prefs.json    – per-project launch choices, favorites, recency
 //
-// Both decode field-by-field with `decodeIfPresent` so that adding a setting in
-// a later version doesn't make older files fail to load and silently reset
+// All three decode field-by-field with `decodeIfPresent`, so adding a setting
+// in a later version can't make an older file fail to load and silently reset
 // somebody's configuration.
 
-/// Where the app keeps its files. Created on first launch if missing.
 enum AppPaths {
     static var supportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                             in: .userDomainMask).first!
         let dir = base.appendingPathComponent("ClaudeLauncher", isDirectory: true)
-        // Creating a directory that already exists is a no-op with
-        // withIntermediateDirectories: true, so this is safe to call every time.
         try? FileManager.default.createDirectory(at: dir,
                                                  withIntermediateDirectories: true)
         return dir
     }
 
     static var configFile: URL { supportDirectory.appendingPathComponent("config.json") }
+    static var libraryFile: URL { supportDirectory.appendingPathComponent("library.json") }
     static var prefsFile: URL { supportDirectory.appendingPathComponent("prefs.json") }
 
-    /// Temporary shell scripts we hand to Terminal.app live here.
+    /// Generated launch scripts and Terminal profiles live here.
     static var sessionsDirectory: URL {
         let dir = supportDirectory.appendingPathComponent("sessions", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir,
@@ -36,47 +35,34 @@ enum AppPaths {
     }
 }
 
-/// Which directories get scanned for projects, and what to ignore.
+/// Which directories get searched when looking for candidate projects.
 struct Config: Codable {
 
-    /// Top-level folders to scan. `~` is expanded at scan time.
+    /// Main folders to search. `~` is expanded at scan time.
     ///
-    /// Deliberately empty by default: this app has no way to know where a given
-    /// person keeps their code, so a fresh install asks rather than guessing at
-    /// paths that only exist on one machine.
+    /// Empty by default: the app has no way to know where a given person keeps
+    /// their code, so a fresh install asks rather than guessing at paths that
+    /// exist on only one machine.
     var roots: [String] = []
 
-    /// Folder names that are never treated as projects (build output, caches…).
+    /// Folder names never offered as candidates (build output, caches…).
     var excludes: [String] = [
         "node_modules", "_archive", "Archive", "archive", ".git", ".build",
         "build", "dist", "out", "venv", ".venv", "__pycache__", "DerivedData",
-        "Pods", ".next", ".cache", "vendor", "target"
+        "Pods", ".next", ".cache", "vendor", "target", "Library", "Applications"
     ]
 
-    /// When false (the default), only folders carrying a project marker are
-    /// listed. When true, every folder inside a root shows up — the escape
-    /// hatch for launching somewhere that has no marker file yet.
-    var showAllFolders: Bool = false
-
-    // MARK: Codable
-
-    private enum CodingKeys: String, CodingKey {
-        case roots, excludes, showAllFolders
-    }
+    private enum CodingKeys: String, CodingKey { case roots, excludes }
 
     init() {}
 
     init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let defaults = Config()
-        roots = try container.decodeIfPresent([String].self, forKey: .roots) ?? defaults.roots
-        excludes = try container.decodeIfPresent([String].self, forKey: .excludes) ?? defaults.excludes
-        showAllFolders = try container.decodeIfPresent(Bool.self, forKey: .showAllFolders) ?? defaults.showAllFolders
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Config()
+        roots = try c.decodeIfPresent([String].self, forKey: .roots) ?? d.roots
+        excludes = try c.decodeIfPresent([String].self, forKey: .excludes) ?? d.excludes
     }
 
-    // MARK: Persistence
-
-    /// Loads config.json, falling back to defaults if it's missing or corrupt.
     static func load() -> Config {
         guard let data = try? Data(contentsOf: AppPaths.configFile),
               let decoded = try? JSONDecoder().decode(Config.self, from: data) else {
@@ -88,59 +74,90 @@ struct Config: Codable {
     func save() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        // A failed write just means settings don't persist — not worth
-        // interrupting the user over, so we swallow the error.
         try? encoder.encode(self).write(to: AppPaths.configFile)
     }
 }
 
-/// Per-project choices and sidebar state the launcher remembers between runs.
+/// The curated project set and how the user has arranged it.
+struct Library: Codable {
+
+    /// Every project the user ticked in the setup sheet.
+    var projects: [Project] = []
+
+    /// User-created sidebar sections, in display order.
+    var sections: [LibrarySection] = []
+
+    private enum CodingKeys: String, CodingKey { case projects, sections }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        projects = try c.decodeIfPresent([Project].self, forKey: .projects) ?? []
+        sections = try c.decodeIfPresent([LibrarySection].self, forKey: .sections) ?? []
+    }
+
+    static func load() -> Library {
+        guard let data = try? Data(contentsOf: AppPaths.libraryFile),
+              let decoded = try? JSONDecoder().decode(Library.self, from: data) else {
+            return Library()
+        }
+        return decoded
+    }
+
+    func save() {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try? encoder.encode(self).write(to: AppPaths.libraryFile)
+    }
+
+    /// Projects not filed into any section. They surface under "Unsorted" so a
+    /// newly added project can never be invisible.
+    var unsortedProjects: [Project] {
+        let filed = Set(sections.flatMap(\.projectPaths))
+        return projects.filter { !filed.contains($0.path) }
+    }
+}
+
+/// Per-project launch choices and sidebar state.
 struct Prefs: Codable {
 
-    /// project path -> last model used there
     var lastModel: [String: ClaudeModel] = [:]
-    /// project path -> whether --dangerously-skip-permissions was on
-    var skipPermissions: [String: Bool] = [:]
-    /// project path -> when it was last launched (drives the Recent section)
+    var permissionMode: [String: PermissionMode] = [:]
+    /// Absent means "don't pass --effort", letting Claude use its own default.
+    var effort: [String: EffortLevel] = [:]
+    /// Terminal profile name chosen per project, e.g. "Ocean".
+    var terminalTheme: [String: String] = [:]
     var lastUsed: [String: Date] = [:]
-    /// Paths pinned to the Favorites section, in the order they were added.
     var favorites: [String] = []
 
-    /// Sidebar sections the user has explicitly opened or closed.
-    ///
-    /// Only *explicit* choices are stored. A section that isn't in here falls
-    /// back to `defaultExpanded`, which is what lets folder groups start
-    /// collapsed while Favorites and Recent start open — and means a group
-    /// discovered by a future rescan gets the sensible default rather than
-    /// inheriting some stale entry.
+    /// Sidebar sections the user has explicitly opened or closed. Only explicit
+    /// choices are stored, so a section added later gets the sensible default
+    /// rather than inheriting a stale entry.
     var sectionExpanded: [String: Bool] = [:]
 
-    /// You chose "on by default", so an unseen project starts with the flag set.
-    static let defaultSkipPermissions = true
-
-    // MARK: Codable
-
     private enum CodingKeys: String, CodingKey {
-        case lastModel, skipPermissions, lastUsed, favorites, sectionExpanded
+        case lastModel, permissionMode, effort, terminalTheme
+        case lastUsed, favorites, sectionExpanded
     }
 
     init() {}
 
     init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        lastModel = try container.decodeIfPresent([String: ClaudeModel].self, forKey: .lastModel) ?? [:]
-        skipPermissions = try container.decodeIfPresent([String: Bool].self, forKey: .skipPermissions) ?? [:]
-        lastUsed = try container.decodeIfPresent([String: Date].self, forKey: .lastUsed) ?? [:]
-        favorites = try container.decodeIfPresent([String].self, forKey: .favorites) ?? []
-        sectionExpanded = try container.decodeIfPresent([String: Bool].self, forKey: .sectionExpanded) ?? [:]
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lastModel = try c.decodeIfPresent([String: ClaudeModel].self, forKey: .lastModel) ?? [:]
+        permissionMode = try c.decodeIfPresent([String: PermissionMode].self, forKey: .permissionMode) ?? [:]
+        effort = try c.decodeIfPresent([String: EffortLevel].self, forKey: .effort) ?? [:]
+        terminalTheme = try c.decodeIfPresent([String: String].self, forKey: .terminalTheme) ?? [:]
+        lastUsed = try c.decodeIfPresent([String: Date].self, forKey: .lastUsed) ?? [:]
+        favorites = try c.decodeIfPresent([String].self, forKey: .favorites) ?? []
+        sectionExpanded = try c.decodeIfPresent([String: Bool].self, forKey: .sectionExpanded) ?? [:]
     }
-
-    // MARK: Persistence
 
     static func load() -> Prefs {
         let decoder = JSONDecoder()
-        // Must match the encoder below, or every stored date fails to parse
-        // and the Recent list silently comes back empty.
+        // Must match the encoder below, or every stored date fails to parse and
+        // the Recent list silently comes back empty.
         decoder.dateDecodingStrategy = .iso8601
         guard let data = try? Data(contentsOf: AppPaths.prefsFile),
               let decoded = try? decoder.decode(Prefs.self, from: data) else {

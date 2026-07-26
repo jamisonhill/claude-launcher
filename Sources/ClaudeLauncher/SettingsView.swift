@@ -1,10 +1,6 @@
 import SwiftUI
 
 // MARK: - Settings (⌘,)
-//
-// Scan roots used to be editable only by hand-editing config.json. That's fine
-// for the person who wrote the app and a dead end for anyone they hand it to,
-// so root management lives here instead.
 
 struct SettingsView: View {
     @EnvironmentObject private var store: LauncherStore
@@ -13,9 +9,9 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Project Folders")
+                Text("Main Folders")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Claude Launcher looks inside these folders for projects.")
+                Text("Claude Launcher searches these folders when you choose projects.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -34,7 +30,7 @@ struct SettingsView: View {
                     .tag(root)
                 }
             }
-            .frame(height: 150)
+            .frame(height: 120)
             .overlay {
                 if store.roots.isEmpty {
                     Text("No folders added yet")
@@ -44,60 +40,58 @@ struct SettingsView: View {
             }
 
             HStack(spacing: 8) {
-                Button {
-                    store.presentAddRootPanel()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .help("Add a project folder")
-
+                Button { store.chooseMainFolder() } label: { Image(systemName: "plus") }
+                    .help("Add a main folder")
                 Button {
                     if let selectedRoot {
                         store.removeRoot(selectedRoot)
                         self.selectedRoot = nil
                     }
-                } label: {
-                    Image(systemName: "minus")
-                }
-                .help("Remove the selected folder")
-                .disabled(selectedRoot == nil)
+                } label: { Image(systemName: "minus") }
+                    .help("Remove the selected folder")
+                    .disabled(selectedRoot == nil)
 
                 Spacer()
 
-                Button("Rescan Now") { store.refresh() }
+                Button("Choose Projects…") { store.beginCuration() }
                     .controlSize(.small)
+                    .disabled(store.roots.isEmpty)
             }
 
             Divider()
 
             VStack(alignment: .leading, spacing: 5) {
-                Toggle("Show folders without projects",
-                       isOn: Binding(get: { store.showAllFolders },
-                                     set: { store.setShowAllFolders($0) }))
-
+                Text("Terminal Themes")
+                    .font(.system(size: 13, weight: .semibold))
                 Text("""
-                     By default only folders containing a project marker \
-                     (.git, CLAUDE.md, package.json, and similar) are listed. \
-                     Turn this on to see every folder inside your project \
-                     folders instead.
+                     Themes come from the profiles installed in Terminal. Picking one \
+                     installs a copy named "Claude — <name>" so your own profiles are \
+                     never modified. Manage them in Terminal → Settings → Profiles.
                      """)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(store.availableThemes.isEmpty
+                     ? "No Terminal profiles found."
+                     : "Available: " + store.availableThemes.joined(separator: ", "))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Divider()
 
             HStack {
-                Text("\(store.projects.count) projects found")
+                Text("\(store.projects.count) projects in your library")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Show Config File…") { store.revealConfigFile() }
+                Button("Show Config Files…") { store.revealConfigFile() }
                     .controlSize(.small)
             }
         }
         .padding(20)
-        .frame(width: 460)
+        .frame(width: 470)
     }
 }

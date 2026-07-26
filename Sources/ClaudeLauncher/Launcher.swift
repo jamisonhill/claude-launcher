@@ -3,21 +3,28 @@ import Foundation
 
 // MARK: - Launching a Claude Code session
 //
-// How this works, and why:
+// We write a small executable script and ask Terminal.app to open it, either
+// directly (`.command`) or via a generated colour profile (`.terminal`). macOS
+// opens both in a fresh Terminal window and runs them, which gives us the new
+// window, the right directory, and Claude running.
 //
-// We write a small executable `.command` script and ask Terminal.app to open
-// it. macOS opens `.command` files in a fresh Terminal window and runs them,
-// which gives us exactly what we want (new window, right directory, Claude
-// running) without needing AppleScript.
-//
-// Avoiding AppleScript matters here: sending Apple Events to Terminal requires
+// Avoiding AppleScript is deliberate: sending Apple Events to Terminal requires
 // an Automation permission grant tied to the app's code signature. An ad-hoc
 // signed app that gets rebuilt would re-prompt for that permission constantly.
 // Opening a file has no such requirement.
 
+/// Everything the user chose in the launch panel.
+struct LaunchOptions {
+    var model: ClaudeModel = .opus
+    var permissionMode: PermissionMode = .defaultMode
+    /// Nil means don't pass `--effort` at all.
+    var effort: EffortLevel?
+    /// Terminal profile name to colour the window with, or nil for the default.
+    var terminalTheme: String?
+}
+
 enum Launcher {
 
-    /// Anything that can stop a launch before Terminal ever opens.
     enum LaunchError: LocalizedError {
         case missingDirectory(String)
         case claudeNotFound
@@ -27,7 +34,7 @@ enum Launcher {
         var errorDescription: String? {
             switch self {
             case .missingDirectory(let path):
-                return "That folder no longer exists:\n\(path)\n\nTry refreshing the project list."
+                return "That folder no longer exists:\n\(path)"
             case .claudeNotFound:
                 return "Couldn't find the `claude` executable in any of the usual locations."
             case .scriptWriteFailed(let reason):
@@ -38,9 +45,8 @@ enum Launcher {
         }
     }
 
-    // MARK: Locating the CLI
+    // MARK: - Locating the CLI
 
-    /// Places Claude Code commonly installs to, in the order we check them.
     private static let candidateClaudePaths = [
         "~/.local/bin/claude",
         "/opt/homebrew/bin/claude",
@@ -51,9 +57,9 @@ enum Launcher {
 
     /// Resolves an absolute path to the `claude` binary.
     ///
-    /// We resolve it up front rather than relying on the script's PATH, so a
-    /// missing CLI produces a clear dialog instead of a Terminal window that
-    /// flashes "command not found" and vanishes.
+    /// Resolved up front rather than relying on the script's PATH, so a missing
+    /// CLI produces a clear dialog instead of a Terminal window that flashes
+    /// "command not found" and vanishes.
     static func findClaudeExecutable() -> String? {
         for candidate in candidateClaudePaths {
             let expanded = (candidate as NSString).expandingTildeInPath
@@ -81,26 +87,32 @@ enum Launcher {
                 return path
             }
         } catch {
-            // Shell lookup failed; fall through to nil so the caller can report it.
+            // Shell lookup failed; fall through to nil so the caller reports it.
         }
         return nil
     }
 
-    // MARK: Building the command
+    // MARK: - Building the command
+
+    /// The flags implied by a set of options, in a stable order.
+    static func arguments(for options: LaunchOptions) -> [String] {
+        var args = ["--model", options.model.modelID,
+                    "--permission-mode", options.permissionMode.flagValue]
+        if let effort = options.effort {
+            args += ["--effort", effort.flagValue]
+        }
+        return args
+    }
 
     /// The exact command that will run, used both for the preview line in the
-    /// UI and for the generated script. Keeping one source of truth means the
-    /// preview can never drift from what actually executes.
+    /// UI and for the generated script. One source of truth means the preview
+    /// can't drift from what actually executes.
     static func commandPreview(project: Project,
-                               model: ClaudeModel,
-                               skipPermissions: Bool,
+                               options: LaunchOptions,
                                claudePath: String?) -> String {
         let claude = claudePath.map { shellQuote($0) } ?? "claude"
-        var command = "cd \(shellQuote(project.path)) && \(claude) --model \(model.modelID)"
-        if skipPermissions {
-            command += " --dangerously-skip-permissions"
-        }
-        return command
+        let flags = arguments(for: options).joined(separator: " ")
+        return "cd \(shellQuote(project.path)) && \(claude) \(flags)"
     }
 
     /// Wraps a string in single quotes, safely, for use in a shell command.
@@ -109,12 +121,10 @@ enum Launcher {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    // MARK: Launching
+    // MARK: - Launching
 
     /// Writes the launch script and opens it in a new Terminal window.
-    static func launch(project: Project,
-                       model: ClaudeModel,
-                       skipPermissions: Bool) throws {
+    static func launch(project: Project, options: LaunchOptions) throws {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: project.path, isDirectory: &isDir),
               isDir.boolValue else {
@@ -125,19 +135,14 @@ enum Launcher {
             throw LaunchError.claudeNotFound
         }
 
-        // The script filename becomes the Terminal window title, so name it
-        // after the project.
         let safeName = project.name.replacingOccurrences(
             of: "[^A-Za-z0-9._-]", with: "-", options: .regularExpression)
         let scriptURL = AppPaths.sessionsDirectory
             .appendingPathComponent("\(safeName).command")
 
-        var flags = "--model \(model.modelID)"
-        if skipPermissions {
-            flags += " --dangerously-skip-permissions"
-        }
+        let flags = arguments(for: options).map(shellQuote).joined(separator: " ")
 
-        // `-l` runs a login shell so the session gets your normal environment.
+        // `-l` runs a login shell so the session gets the normal environment.
         // `exec` replaces the shell with Claude, so quitting Claude closes the
         // session cleanly instead of dropping you into a leftover subshell.
         let script = """
@@ -155,30 +160,37 @@ enum Launcher {
             throw LaunchError.scriptWriteFailed(error.localizedDescription)
         }
 
-        try openInTerminal(scriptURL)
+        // With a theme, open a generated profile that carries both the colours
+        // and the script. Without one — or if the profile can't be built — open
+        // the script directly and let Terminal use its default profile.
+        if let theme = options.terminalTheme,
+           let profileURL = TerminalThemes.makeProfile(basedOn: theme,
+                                                       runningScriptAt: scriptURL.path,
+                                                       windowTitle: project.name) {
+            try openInTerminal(profileURL)
+        } else {
+            try openInTerminal(scriptURL)
+        }
     }
 
-    /// Hands the script to Terminal.app specifically, rather than whatever app
-    /// happens to be the default handler for `.command` files.
-    private static func openInTerminal(_ scriptURL: URL) throws {
-        let terminalURL = terminalApplicationURL()
-
+    /// Hands a file to Terminal.app specifically, rather than whatever app
+    /// happens to be the default handler for its extension.
+    private static func openInTerminal(_ fileURL: URL) throws {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true   // bring the new window to the front
 
         var launchError: Error?
         let semaphore = DispatchSemaphore(value: 0)
 
-        NSWorkspace.shared.open([scriptURL],
-                                withApplicationAt: terminalURL,
+        NSWorkspace.shared.open([fileURL],
+                                withApplicationAt: terminalApplicationURL(),
                                 configuration: configuration) { _, error in
             launchError = error
             semaphore.signal()
         }
 
-        // Wait briefly so we can surface a failure in the UI. If Terminal is
-        // slow to launch we give up waiting and assume success rather than
-        // freezing the window.
+        // Wait briefly so a failure can surface in the UI. If Terminal is slow
+        // to launch we stop waiting and assume success rather than freezing.
         _ = semaphore.wait(timeout: .now() + 5)
 
         if let launchError {

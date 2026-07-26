@@ -9,61 +9,40 @@ struct ClaudeLauncherApp: App {
         Window("Claude Launcher", id: "main") {
             ContentView()
                 .environmentObject(store)
-                .frame(minWidth: 820, minHeight: 540)
+                .frame(minWidth: 840, minHeight: 620)
         }
         .windowResizability(.contentMinSize)
         .commands {
-            // Replace the useless "New Window" item with the things this app
-            // actually needs from the menu bar.
             CommandGroup(replacing: .newItem) {
-                Button("Add Project Folder…") {
-                    store.presentAddRootPanel()
-                }
-                .keyboardShortcut("o", modifiers: .command)
-
-                Button("Refresh Projects") {
-                    store.refresh()
-                }
-                .keyboardShortcut("r", modifiers: .command)
+                Button("Add Main Folder…") { store.chooseMainFolder() }
+                    .keyboardShortcut("o", modifiers: .command)
+                Button("Choose Projects…") { store.beginCuration() }
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                    .disabled(store.roots.isEmpty)
             }
 
             CommandMenu("Projects") {
                 Button(store.selectedProject.map { store.isFavorite($0) } == true
-                       ? "Remove from Favorites"
-                       : "Add to Favorites") {
+                       ? "Remove from Favorites" : "Add to Favorites") {
                     store.toggleFavoriteForSelection()
                 }
                 .keyboardShortcut("d", modifiers: .command)
                 .disabled(store.selectedProject == nil)
 
                 Button("Reveal in Finder") {
-                    if let project = store.selectedProject {
-                        store.revealProject(project)
-                    }
+                    if let project = store.selectedProject { store.revealProject(project) }
                 }
                 .disabled(store.selectedProject == nil)
 
                 Divider()
 
-                Button("Collapse All Sections") {
-                    store.setAllSectionsExpanded(false)
-                }
-                Button("Expand All Sections") {
-                    store.setAllSectionsExpanded(true)
-                }
-
-                Divider()
-
-                Toggle("Show Folders Without Projects",
-                       isOn: Binding(get: { store.showAllFolders },
-                                     set: { store.setShowAllFolders($0) }))
+                Button("Collapse All Sections") { store.setAllSectionsExpanded(false) }
+                Button("Expand All Sections") { store.setAllSectionsExpanded(true) }
             }
         }
 
-        // Gives us the standard ⌘, Settings item for free.
         Settings {
-            SettingsView()
-                .environmentObject(store)
+            SettingsView().environmentObject(store)
         }
     }
 }

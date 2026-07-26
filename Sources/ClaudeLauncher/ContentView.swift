@@ -1,9 +1,6 @@
 import SwiftUI
 
 // MARK: - Main window
-//
-// Two panes: a searchable project list on the left, launch controls on the
-// right. Icons are SF Symbols throughout.
 
 struct ContentView: View {
     @EnvironmentObject private var store: LauncherStore
@@ -11,7 +8,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             ProjectSidebar()
-                .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+                .navigationSplitViewColumnWidth(min: 230, ideal: 265, max: 360)
         } detail: {
             if store.selectedProject != nil {
                 LaunchPanel()
@@ -19,18 +16,14 @@ struct ContentView: View {
                 EmptyStatePanel()
             }
         }
-        // Launch failures surface here rather than in a silent log.
+        .sheet(isPresented: $store.isShowingSetup) {
+            SetupSheet().environmentObject(store)
+        }
         .alert("Couldn't launch",
-               isPresented: Binding(
-                   get: { store.errorMessage != nil },
-                   set: { if !$0 { store.errorMessage = nil } }
-               ),
-               actions: {
-                   Button("OK", role: .cancel) { store.errorMessage = nil }
-               },
-               message: {
-                   Text(store.errorMessage ?? "")
-               })
+               isPresented: Binding(get: { store.errorMessage != nil },
+                                    set: { if !$0 { store.errorMessage = nil } }),
+               actions: { Button("OK", role: .cancel) { store.errorMessage = nil } },
+               message: { Text(store.errorMessage ?? "") })
     }
 }
 
@@ -38,23 +31,24 @@ struct ContentView: View {
 
 private struct ProjectSidebar: View {
     @EnvironmentObject private var store: LauncherStore
+    @State private var newSectionName = ""
+    @State private var isAddingSection = false
+    @State private var renamingSection: LibrarySection?
+    @State private var renameText = ""
 
     var body: some View {
-        Group {
-            if store.hasNoRoots {
-                NoRootsSidebar()
+        VStack(spacing: 0) {
+            if store.needsSetup {
+                WelcomeSidebar()
             } else {
                 projectList
+                Divider()
+                addSectionBar
             }
         }
-        // The system search field replaces a hand-rolled icon + TextField +
-        // clear button, and brings focus handling and ⌘F along with it.
         .searchable(text: $store.searchText,
                     placement: .sidebar,
                     prompt: "Search projects")
-        // Refresh and collapse-all live in the window toolbar rather than a
-        // sidebar footer, which is the native placement and gives the list
-        // back its vertical space.
         .toolbar {
             ToolbarItem {
                 Button {
@@ -64,103 +58,174 @@ private struct ProjectSidebar: View {
                           ? "rectangle.expand.vertical"
                           : "rectangle.compress.vertical")
                 }
-                .help(store.allSectionsCollapsed
-                      ? "Expand all sections"
-                      : "Collapse all sections")
-                .disabled(store.isSearching || store.hasNoRoots)
+                .help(store.allSectionsCollapsed ? "Expand all sections" : "Collapse all sections")
+                .disabled(store.isSearching || store.needsSetup)
             }
-
             ToolbarItem {
                 Menu {
-                    Toggle("Show Folders Without Projects",
-                           isOn: Binding(get: { store.showAllFolders },
-                                         set: { store.setShowAllFolders($0) }))
+                    Button("Choose Projects…") { store.beginCuration() }
+                        .disabled(store.roots.isEmpty)
+                    Button("Add Main Folder…") { store.chooseMainFolder() }
                     Divider()
-                    Button("Add Folder…") { store.presentAddRootPanel() }
-                    Button("Refresh") { store.refresh() }
+                    Button("New Section…") { isAddingSection = true }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
-                .help("Project list options")
+                .help("Library options")
+            }
+        }
+        .alert("New Section", isPresented: $isAddingSection) {
+            TextField("Name", text: $newSectionName)
+            Button("Cancel", role: .cancel) { newSectionName = "" }
+            Button("Add") {
+                store.addSection(named: newSectionName)
+                newSectionName = ""
+            }
+        } message: {
+            Text("Sections let you group projects however you like.")
+        }
+        .alert("Rename Section", isPresented: Binding(
+            get: { renamingSection != nil },
+            set: { if !$0 { renamingSection = nil } })) {
+            TextField("Name", text: $renameText)
+            Button("Cancel", role: .cancel) { renamingSection = nil }
+            Button("Rename") {
+                if let section = renamingSection {
+                    store.renameSection(section, to: renameText)
+                }
+                renamingSection = nil
             }
         }
     }
+
+    // MARK: List
 
     private var projectList: some View {
         List(selection: Binding(
             get: { store.selectedPath },
             set: { newValue in
-                // Selecting through the List binding must go through select()
-                // so the model / permission state gets restored too.
+                // Selection must route through select() so the launch settings
+                // for that project get restored too.
                 if let newValue,
                    let project = store.projects.first(where: { $0.path == newValue }) {
                     store.select(project)
                 }
             }
         )) {
-            // While searching we show one flat list of matches — sections and
-            // their collapse state would just get in the way of finding things.
             if store.isSearching {
+                // A flat list of matches: sections only get in the way once you
+                // know what you're after, and a match inside a collapsed
+                // section reads as "no such project".
                 ForEach(store.filteredProjects) { project in
-                    ProjectRow(project: project, showsPath: true)
-                        .tag(project.path)
+                    ProjectRow(project: project, showsPath: true).tag(project.path)
                 }
             } else {
-                if !store.favoriteProjects.isEmpty {
-                    Section(isExpanded: store.expansionBinding(for: LauncherStore.favoritesSection)) {
-                        ForEach(store.favoriteProjects) { project in
-                            ProjectRow(project: project, showsPath: false)
-                                .tag(project.path)
-                        }
-                        .onMove { offsets, destination in
-                            store.moveFavorites(fromOffsets: offsets, toOffset: destination)
-                        }
-                    } header: {
-                        SidebarSectionHeader(title: LauncherStore.favoritesSection,
-                                             icon: "star.fill",
-                                             count: store.favoriteProjects.count)
-                    }
-                }
-
-                if !store.recentProjects.isEmpty {
-                    Section(isExpanded: store.expansionBinding(for: LauncherStore.recentSection)) {
-                        ForEach(store.recentProjects) { project in
-                            ProjectRow(project: project, showsPath: false)
-                                .tag(project.path)
-                        }
-                    } header: {
-                        SidebarSectionHeader(title: LauncherStore.recentSection,
-                                             icon: "clock",
-                                             count: store.recentProjects.count)
-                    }
-                }
-
-                ForEach(store.groupedProjects, id: \.group) { section in
-                    Section(isExpanded: store.expansionBinding(for: section.group)) {
-                        ForEach(section.projects) { project in
-                            ProjectRow(project: project, showsPath: false)
-                                .tag(project.path)
-                        }
-                    } header: {
-                        SidebarSectionHeader(title: section.group,
-                                             icon: nil,
-                                             count: section.projects.count)
-                    }
-                }
+                specialSections
+                userSections
+                unsortedSection
             }
         }
         .listStyle(.sidebar)
         .overlay {
-            // A search that matches nothing used to leave a blank sidebar with
-            // no explanation of why.
             if store.isSearching && store.filteredProjects.isEmpty {
                 ContentUnavailableView.search(text: store.searchText)
             }
         }
     }
+
+    @ViewBuilder
+    private var specialSections: some View {
+        if !store.favoriteProjects.isEmpty {
+            Section(isExpanded: store.expansionBinding(for: LauncherStore.favoritesSection)) {
+                ForEach(store.favoriteProjects) { project in
+                    ProjectRow(project: project, showsPath: false).tag(project.path)
+                }
+                .onMove { store.moveFavorites(fromOffsets: $0, toOffset: $1) }
+            } header: {
+                SidebarSectionHeader(title: "FAVORITES", icon: "star.fill",
+                                     count: store.favoriteProjects.count)
+            }
+        }
+
+        if !store.recentProjects.isEmpty {
+            Section(isExpanded: store.expansionBinding(for: LauncherStore.recentSection)) {
+                ForEach(store.recentProjects) { project in
+                    ProjectRow(project: project, showsPath: false).tag(project.path)
+                }
+            } header: {
+                SidebarSectionHeader(title: "RECENT", icon: "clock",
+                                     count: store.recentProjects.count)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var userSections: some View {
+        ForEach(store.sections) { section in
+            Section(isExpanded: store.expansionBinding(for: section.id.uuidString)) {
+                ForEach(store.projects(in: section)) { project in
+                    ProjectRow(project: project, showsPath: false).tag(project.path)
+                }
+                .onMove { store.moveProjects(in: section, fromOffsets: $0, toOffset: $1) }
+            } header: {
+                SidebarSectionHeader(title: section.name.uppercased(), icon: nil,
+                                     count: section.projectPaths.count)
+                    .contextMenu {
+                        Button("Rename…") {
+                            renameText = section.name
+                            renamingSection = section
+                        }
+                        Button("Delete Section", role: .destructive) {
+                            store.deleteSection(section)
+                        }
+                    }
+            }
+            // Dropping onto a section files the project there. The context menu
+            // on each row does the same thing, since cross-section dragging in
+            // a sidebar List is easy to miss and easy to fumble.
+            .dropDestination(for: String.self) { paths, _ in
+                for path in paths { store.move(projectPath: path, toSection: section.id) }
+                return !paths.isEmpty
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var unsortedSection: some View {
+        let unsorted = store.unsortedProjects
+        if !unsorted.isEmpty {
+            Section(isExpanded: store.expansionBinding(for: LauncherStore.unsortedSection)) {
+                ForEach(unsorted) { project in
+                    ProjectRow(project: project, showsPath: false).tag(project.path)
+                }
+            } header: {
+                SidebarSectionHeader(title: "UNSORTED", icon: "tray",
+                                     count: unsorted.count)
+            }
+            .dropDestination(for: String.self) { paths, _ in
+                for path in paths { store.move(projectPath: path, toSection: nil) }
+                return !paths.isEmpty
+            }
+        }
+    }
+
+    private var addSectionBar: some View {
+        Button {
+            isAddingSection = true
+        } label: {
+            Label("New Section", systemImage: "plus")
+                .font(.system(size: 11))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
-/// Sidebar section heading: optional icon, name, and item count.
+// MARK: - Sidebar pieces
+
 private struct SidebarSectionHeader: View {
     let title: String
     let icon: String?
@@ -168,59 +233,16 @@ private struct SidebarSectionHeader: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            // Only Favorites and Recent carry an icon. Folder groups repeat a
-            // dozen times over, and an icon on each is pure visual frequency.
             if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 9))
-                    .frame(width: 11)
+                Image(systemName: icon).font(.system(size: 9)).frame(width: 11)
             }
-            Text(title)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Text("\(count)")
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 1)
+            Text(title).lineLimit(1).truncationMode(.tail)
+            Text("\(count)").foregroundStyle(.tertiary).padding(.leading, 1)
         }
-        // Long group names truncate in a 240pt sidebar, so the full name has to
-        // be recoverable somewhere.
         .help(title)
     }
 }
 
-/// Shown in place of the list on a fresh install, before any folder is chosen.
-private struct NoRootsSidebar: View {
-    @EnvironmentObject private var store: LauncherStore
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "folder.badge.plus")
-                .font(.system(size: 26))
-                .foregroundStyle(.tertiary)
-
-            VStack(spacing: 4) {
-                Text("No folders yet")
-                    .font(.system(size: 13, weight: .medium))
-                Text("Choose a folder that holds your projects.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-
-            Button("Add Folder…") {
-                store.presentAddRootPanel()
-            }
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// One row in the sidebar, with a star for pinning.
-///
-/// The star only appears on hover or when the project is already favorited, so
-/// a hundred-row sidebar isn't a wall of empty outlines.
 private struct ProjectRow: View {
     @EnvironmentObject private var store: LauncherStore
     let project: Project
@@ -254,11 +276,9 @@ private struct ProjectRow: View {
             Spacer(minLength: 4)
 
             // The star's space is always reserved and only its opacity changes.
-            // Showing/hiding the view itself reflowed the row's text every time
-            // the pointer crossed it.
-            Button {
-                store.toggleFavorite(project)
-            } label: {
+            // Showing and hiding the view itself reflowed the row's text every
+            // time the pointer crossed it.
+            Button { store.toggleFavorite(project) } label: {
                 Image(systemName: isFavorite ? "star.fill" : "star")
                     .font(.system(size: 11))
                     .foregroundStyle(isFavorite ? Color.yellow : Color.secondary)
@@ -271,38 +291,78 @@ private struct ProjectRow: View {
         .padding(.vertical, 1)
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
+        .draggable(project.path)
         .contextMenu {
             Button(isFavorite ? "Remove from Favorites" : "Add to Favorites") {
                 store.toggleFavorite(project)
             }
-            Divider()
-            Button("Reveal in Finder") {
-                store.revealProject(project)
+
+            Menu("Move to Section") {
+                ForEach(store.sections) { section in
+                    Button(section.name) {
+                        store.move(projectPath: project.path, toSection: section.id)
+                    }
+                }
+                if !store.sections.isEmpty { Divider() }
+                Button("Unsorted") {
+                    store.move(projectPath: project.path, toSection: nil)
+                }
             }
+
+            Divider()
+            Button("Reveal in Finder") { store.revealProject(project) }
         }
     }
 }
 
-// MARK: - Detail: launch controls
+private struct WelcomeSidebar: View {
+    @EnvironmentObject private var store: LauncherStore
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "folder.badge.plus")
+                .font(.system(size: 26))
+                .foregroundStyle(.tertiary)
+            VStack(spacing: 4) {
+                Text("No projects yet")
+                    .font(.system(size: 13, weight: .medium))
+                Text("Point the app at the folder your projects live in.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            Button(store.roots.isEmpty ? "Choose Folder…" : "Choose Projects…") {
+                if store.roots.isEmpty { store.chooseMainFolder() } else { store.beginCuration() }
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Launch panel
 
 private struct LaunchPanel: View {
     @EnvironmentObject private var store: LauncherStore
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 20) {
                 header
                 modelPicker
-                permissionsToggle
+                permissionPicker
+                effortPicker
+                themePicker
                 launchButton
                 commandPreview
             }
-            .padding(26)
+            .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    // MARK: Header — which project is selected
+    private var contentWidth: CGFloat { 430 }
 
     @ViewBuilder
     private var header: some View {
@@ -311,19 +371,13 @@ private struct LaunchPanel: View {
                 HStack(spacing: 9) {
                     Text(project.name)
                         .font(.system(size: 22, weight: .semibold))
-
-                    Button {
-                        store.toggleFavorite(project)
-                    } label: {
+                    Button { store.toggleFavorite(project) } label: {
                         Image(systemName: store.isFavorite(project) ? "star.fill" : "star")
                             .font(.system(size: 15))
-                            .foregroundStyle(store.isFavorite(project)
-                                             ? Color.yellow : Color.secondary)
+                            .foregroundStyle(store.isFavorite(project) ? Color.yellow : Color.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help(store.isFavorite(project)
-                          ? "Remove from favorites (⌘D)"
-                          : "Add to favorites (⌘D)")
+                    .help(store.isFavorite(project) ? "Remove from favorites (⌘D)" : "Add to favorites (⌘D)")
                 }
 
                 Text(project.displayPath)
@@ -334,6 +388,9 @@ private struct LaunchPanel: View {
                 HStack(spacing: 14) {
                     Label(project.isGitRepo ? "git repo" : "no git repo",
                           systemImage: "arrow.triangle.branch")
+                    if let section = store.section(containing: project.path) {
+                        Label(section.name, systemImage: "square.stack")
+                    }
                     if let lastUsed = store.lastUsedDescription(for: project) {
                         Label(lastUsed, systemImage: "clock")
                     }
@@ -345,76 +402,89 @@ private struct LaunchPanel: View {
         }
     }
 
-    // MARK: Model buttons
-
     private var modelPicker: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             SectionLabel("MODEL")
-
-            // Two-by-two grid of large, clickable model cards.
-            LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: 10),
-                          GridItem(.flexible(), spacing: 10)],
-                spacing: 10
-            ) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8)],
+                      spacing: 8) {
                 ForEach(ClaudeModel.allCases) { model in
-                    ModelCard(model: model,
-                              isSelected: store.selectedModel == model) {
+                    OptionCard(title: model.displayName,
+                               subtitle: model.subtitle,
+                               isSelected: store.selectedModel == model,
+                               isDangerous: false) {
                         store.selectedModel = model
                     }
                 }
             }
-            .frame(maxWidth: 420)
+            .frame(maxWidth: contentWidth)
         }
     }
 
-    // MARK: The dangerous flag
-
-    private var permissionsToggle: some View {
-        VStack(alignment: .leading, spacing: 9) {
+    private var permissionPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
             SectionLabel("PERMISSIONS")
-
-            Toggle(isOn: $store.skipPermissions) {
-                HStack(alignment: .top, spacing: 9) {
-                    Image(systemName: store.skipPermissions
-                          ? "exclamationmark.triangle.fill"
-                          : "lock.shield")
-                        .font(.system(size: 14))
-                        .foregroundStyle(store.skipPermissions ? .red : .secondary)
-                        .frame(width: 18)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Skip permission prompts")
-                            .font(.system(size: 13, weight: .medium))
-                        Text(store.skipPermissions
-                             ? "Claude runs commands without asking. Trusted folders only."
-                             : "Claude asks before running commands or editing files.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8)],
+                      spacing: 8) {
+                ForEach(PermissionMode.allCases) { mode in
+                    OptionCard(title: mode.displayName,
+                               subtitle: mode.subtitle,
+                               isSelected: store.permissionMode == mode,
+                               isDangerous: mode.isDangerous) {
+                        store.permissionMode = mode
                     }
                 }
             }
-            .toggleStyle(.switch)
-            .tint(.red)
-            .padding(12)
-            .frame(maxWidth: 420, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(store.skipPermissions
-                          ? Color.red.opacity(0.07)
-                          : Color.secondary.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(store.skipPermissions
-                                  ? Color.red.opacity(0.35)
-                                  : Color.secondary.opacity(0.2))
-            )
+            .frame(maxWidth: contentWidth)
         }
     }
 
-    // MARK: Launch
+    private var effortPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("EFFORT")
+            Picker("", selection: Binding(
+                get: { store.effort },
+                set: { store.effort = $0 })) {
+                Text(EffortLevel.unsetLabel).tag(EffortLevel?.none)
+                ForEach(EffortLevel.allCases) { level in
+                    Text(level.displayName).tag(EffortLevel?.some(level))
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: contentWidth)
+        }
+    }
+
+    @ViewBuilder
+    private var themePicker: some View {
+        if !store.availableThemes.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel("TERMINAL THEME")
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)],
+                          spacing: 8) {
+                    ThemeSwatch(name: nil,
+                                isSelected: store.terminalTheme == nil) {
+                        store.terminalTheme = nil
+                    }
+                    ForEach(store.availableThemes, id: \.self) { theme in
+                        ThemeSwatch(name: theme,
+                                    isSelected: store.terminalTheme == theme) {
+                            store.terminalTheme = theme
+                        }
+                    }
+                }
+                .frame(maxWidth: contentWidth)
+
+                Text("Colours the Terminal window so concurrent sessions are tellable apart. The window is titled after the project.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: contentWidth, alignment: .leading)
+            }
+        }
+    }
 
     private var launchButton: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -423,10 +493,9 @@ private struct LaunchPanel: View {
             } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "play.fill")
-                    Text("Launch")
-                        .fontWeight(.semibold)
+                    Text("Launch").fontWeight(.semibold)
                 }
-                .frame(maxWidth: 420)
+                .frame(maxWidth: contentWidth)
                 .padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
@@ -447,71 +516,113 @@ private struct LaunchPanel: View {
         }
     }
 
-    // MARK: Command preview
-
     private var commandPreview: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel("WILL RUN")
-
             Text(store.commandPreview)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(10)
-                .frame(maxWidth: 420, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.secondary.opacity(0.08))
-                )
+                .frame(maxWidth: contentWidth, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.secondary.opacity(0.08)))
         }
     }
 }
 
-/// A single selectable model card.
-private struct ModelCard: View {
-    let model: ClaudeModel
+// MARK: - Small components
+
+/// A selectable card used for models and permission modes.
+private struct OptionCard: View {
+    let title: String
+    let subtitle: String
     let isSelected: Bool
+    let isDangerous: Bool
     let action: () -> Void
+
+    private var accent: Color { isDangerous ? .red : .accentColor }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                        .font(.system(size: 14, weight: .medium))
-                    Text(model.subtitle)
+                    HStack(spacing: 4) {
+                        if isDangerous {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.red)
+                        }
+                        Text(title).font(.system(size: 13, weight: .medium))
+                    }
+                    Text(subtitle)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.tint)
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(accent)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected
-                          ? Color.accentColor.opacity(0.12)
-                          : Color.secondary.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(isSelected
-                                  ? Color.accentColor.opacity(0.6)
-                                  : Color.secondary.opacity(0.18))
-            )
+            .background(RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? accent.opacity(0.12) : Color.secondary.opacity(0.06)))
+            .overlay(RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isSelected ? accent.opacity(0.6) : Color.secondary.opacity(0.18)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 }
 
-/// Small uppercase heading used above each control group.
+/// A Terminal profile swatch showing the profile's real colours.
+private struct ThemeSwatch: View {
+    let name: String?
+    let isSelected: Bool
+    let action: () -> Void
+
+    private var background: Color {
+        guard let name, let color = TerminalThemes.backgroundColor(forProfile: name) else {
+            return Color.secondary.opacity(0.15)
+        }
+        return Color(nsColor: color)
+    }
+
+    private var foreground: Color {
+        guard let name, let color = TerminalThemes.textColor(forProfile: name) else {
+            return Color.secondary
+        }
+        return Color(nsColor: color)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 0) {
+                // Draw the profile's own colours so the choice is visual rather
+                // than a list of names you'd have to remember.
+                Text(name ?? "Default")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(foreground)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(background)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.25),
+                              lineWidth: isSelected ? 2 : 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(name ?? "Terminal's default profile")
+    }
+}
+
 private struct SectionLabel: View {
     let text: String
     init(_ text: String) { self.text = text }
@@ -524,61 +635,34 @@ private struct SectionLabel: View {
     }
 }
 
-// MARK: - Empty state
-
 private struct EmptyStatePanel: View {
     @EnvironmentObject private var store: LauncherStore
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: icon)
+            Image(systemName: store.needsSetup ? "folder.badge.plus" : "square.grid.2x2")
                 .font(.system(size: 34))
                 .foregroundStyle(.tertiary)
 
-            Text(title)
+            Text(store.needsSetup ? "Welcome to Claude Launcher" : "Select a project")
                 .font(.system(size: 15, weight: .medium))
 
-            Text(message)
+            Text(store.needsSetup
+                 ? "Choose the folder your projects live in. You'll get a list of everything inside it and pick which ones are real projects."
+                 : "Pick a project on the left to start a Claude Code session there.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 340)
+                .frame(maxWidth: 360)
 
-            // A fresh install has no projects and no obvious next step, so the
-            // way forward is a button rather than a line of documentation.
-            if store.hasNoRoots {
-                Button("Add Folder…") { store.presentAddRootPanel() }
-                    .controlSize(.large)
-                    .padding(.top, 2)
-            } else if store.projects.isEmpty {
-                HStack(spacing: 8) {
-                    Button("Add Another Folder…") { store.presentAddRootPanel() }
-                    Button("Show All Folders") { store.setShowAllFolders(true) }
+            if store.needsSetup {
+                Button(store.roots.isEmpty ? "Choose Folder…" : "Choose Projects…") {
+                    if store.roots.isEmpty { store.chooseMainFolder() } else { store.beginCuration() }
                 }
                 .controlSize(.large)
                 .padding(.top, 2)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var icon: String {
-        store.hasNoRoots ? "folder.badge.plus"
-            : store.projects.isEmpty ? "magnifyingglass" : "square.grid.2x2"
-    }
-
-    private var title: String {
-        store.hasNoRoots ? "Welcome to Claude Launcher"
-            : store.projects.isEmpty ? "No projects found" : "Select a project"
-    }
-
-    private var message: String {
-        if store.hasNoRoots {
-            return "Choose the folder your projects live in, and they'll show up in the sidebar."
-        }
-        if store.projects.isEmpty {
-            return "Nothing in your folders looks like a project. Claude Launcher looks for markers like .git, CLAUDE.md, or package.json — you can list every folder instead."
-        }
-        return "Pick a folder on the left to start a Claude Code session there."
     }
 }
