@@ -1,0 +1,31 @@
+name: Build
+
+# Verifies the app compiles on a clean machine. Deliberately does not sign or
+# notarize: that needs the Developer ID private key, and exporting it into CI
+# secrets is a meaningful expansion of where that key lives. Releases are cut
+# locally with ./publish.sh instead.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Assemble app bundle
+        run: ./build.sh
+
+      - name: Verify the bundle launches as a bundle
+        run: |
+          test -x dist/ClaudeLauncher.app/Contents/MacOS/ClaudeLauncher
+          plutil -lint dist/ClaudeLauncher.app/Contents/Info.plist

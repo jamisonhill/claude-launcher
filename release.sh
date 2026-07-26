@@ -19,7 +19,7 @@ set -eu
 APP_NAME="ClaudeLauncher"
 DISPLAY_NAME="Claude Launcher"
 BUNDLE_ID="com.jamisonhill.claudelauncher"
-VERSION="1.0.0"
+VERSION="${VERSION:-1.0.0}"
 TEAM_ID="HFAWAP3F3Z"
 SIGN_ID="Developer ID Application: Jamison Hill ($TEAM_ID)"
 KEYCHAIN_PROFILE="claude-launcher"
@@ -27,7 +27,7 @@ KEYCHAIN_PROFILE="claude-launcher"
 cd "$(dirname "$0")"
 DIST="dist"
 APP="$DIST/$APP_NAME.app"
-DMG="$DIST/$DISPLAY_NAME.dmg"
+DMG="$DIST/Claude-Launcher-$VERSION.dmg"
 
 echo "==> Compiling (release)…"
 swift build -c release
