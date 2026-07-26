@@ -4,17 +4,52 @@ A native macOS app for starting Claude Code sessions. Pick a project, set the
 options, hit Launch — a Terminal window opens in that folder, in the colour
 scheme you chose, with Claude already running.
 
-Local-only. Not signed for distribution.
-
 ## Build
 
 ```bash
-./build.sh              # builds dist/ClaudeLauncher.app
+./build.sh              # local dev build, ad-hoc signed
 ./build.sh --install    # also copies it to /Applications
 ```
 
 Requires macOS 14+ and the Swift toolchain that ships with Xcode. No other
 dependencies.
+
+## Distribution
+
+```bash
+./release.sh             # signed + hardened, produces dist/Claude Launcher.dmg
+./release.sh --notarize   # also submits to Apple and staples the ticket
+```
+
+Notarization needs credentials stored once in the keychain:
+
+```bash
+xcrun notarytool store-credentials claude-launcher \
+  --apple-id "you@example.com" \
+  --team-id HFAWAP3F3Z \
+  --password "app-specific-password"
+```
+
+That's an *app-specific* password from appleid.apple.com → Sign-In and Security,
+not your Apple ID password.
+
+### Not the Mac App Store
+
+This app can't ship on the Mac App Store, and no amount of work changes that.
+Store apps must run under App Sandbox, which forbids everything this app is:
+
+- spawning `/bin/zsh` to resolve the CLI
+- writing an executable script and having Terminal run it
+- `NSWorkspace.open` against Terminal.app — App Review treats launching
+  arbitrary commands as executing arbitrary code
+- reading `com.apple.Terminal`'s preference domain for colour profiles
+- writing `.terminal` profiles into Terminal's configuration
+- walking arbitrary directories rather than only user-selected ones
+
+No entitlement grants "run a shell command in Terminal", and Guideline 2.5.2
+requires apps be self-contained. A sandboxed build wouldn't be a reduced version
+of this app; it would be a non-functional one. Developer ID + notarization is
+the correct channel and gives recipients the same frictionless install.
 
 ## Setup
 
