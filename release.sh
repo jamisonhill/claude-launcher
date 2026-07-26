@@ -38,6 +38,13 @@ rm -rf "$APP" "$DMG"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/$APP_NAME"
 
+# Regenerate the icon from source so it can never drift from Icon/make-icon.swift.
+if [ -f Icon/make-icon.swift ]; then
+  swift Icon/make-icon.swift >/dev/null
+  iconutil -c icns Icon/AppIcon.iconset -o Icon/AppIcon.icns
+  cp Icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -46,6 +53,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleName</key>              <string>$DISPLAY_NAME</string>
     <key>CFBundleDisplayName</key>       <string>$DISPLAY_NAME</string>
     <key>CFBundleExecutable</key>        <string>$APP_NAME</string>
+    <key>CFBundleIconFile</key>          <string>AppIcon</string>
+    <key>CFBundleIconName</key>          <string>AppIcon</string>
     <key>CFBundleIdentifier</key>        <string>$BUNDLE_ID</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
