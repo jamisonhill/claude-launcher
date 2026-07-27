@@ -11,7 +11,7 @@ set -eu
 APP_NAME="ClaudeLauncher"
 DISPLAY_NAME="Claude Launcher"
 BUNDLE_ID="com.jamisonhill.claudelauncher"
-VERSION="1.0.0"
+VERSION="1.0.2"
 
 cd "$(dirname "$0")"
 DIST="dist"

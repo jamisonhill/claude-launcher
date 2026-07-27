@@ -19,7 +19,7 @@ set -eu
 APP_NAME="ClaudeLauncher"
 DISPLAY_NAME="Claude Launcher"
 BUNDLE_ID="com.jamisonhill.claudelauncher"
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-1.0.2}"
 TEAM_ID="HFAWAP3F3Z"
 SIGN_ID="Developer ID Application: Jamison Hill ($TEAM_ID)"
 KEYCHAIN_PROFILE="claude-launcher"

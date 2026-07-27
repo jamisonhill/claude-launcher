@@ -69,10 +69,13 @@ enum TerminalThemes {
         let installedName = installedPrefix + profileName
         profile["name"] = installedName
         profile["type"] = "Window Settings"
-        profile["CommandString"] = scriptPath
-        // Run the script directly rather than as a shell string: inline shell
-        // syntax has to survive both XML escaping and Terminal's own parsing,
-        // and quoted paths get mangled in the process.
+        // The path has to be shell-quoted even though `RunCommandAsShell` is
+        // false: Terminal still hands the string to the login shell, which
+        // word-splits it. Our scripts live under "Application Support", so an
+        // unquoted path fails with "no such file or directory: …/Application".
+        profile["CommandString"] = Launcher.shellQuote(scriptPath)
+        // Keep the command out of an extra `-c` wrapper; the script already
+        // starts its own login shell and `exec`s Claude.
         profile["RunCommandAsShell"] = false
         profile["ShouldRestoreContent"] = false
         profile["WindowTitle"] = windowTitle
