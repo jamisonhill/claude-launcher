@@ -3,7 +3,8 @@
 A native macOS GUI for starting Claude Code sessions in Terminal.
 Repo: https://github.com/jamisonhill/claude-launcher (public, MIT)
 
-**Status: v1.0.1 shipped, installed via Homebrew, with an app icon.**
+**Status: v1.0.3 published. `/Applications` is still on the old build until
+`brew upgrade --cask claude-launcher` runs.**
 
 ---
 
@@ -47,7 +48,18 @@ Repo: https://github.com/jamisonhill/claude-launcher (public, MIT)
 - [x] **App icon** — `Icon/make-icon.swift`, regenerated on every build.
       Each size drawn natively; downscaling 1024px art turned 16px into a
       smudge. Shipped as v1.0.1.
-- [ ] ← NEXT `-n/--name` flag (sets session name *and* Terminal window title —
+- [x] **Theme picker trimmed to five dark profiles** — filters on measured
+      background luminance, then farthest-point selection on colour so two
+      pure-black profiles (Homebrew, Pro) can't both take a slot. Fixed
+      `installedPrefix` matching only an em dash while every profile the app
+      ever installed used a hyphen, which is what produced
+      `Claude - Claude - Clear Dark`.
+- [x] **Resume-note summary** under the project path — parses
+      `.planning/RESUME.md` for a blocker, else the first still-open next
+      action, else Reason/Status. Verified against all 38 notes under `~/Ai`.
+- [ ] ← PAUSED HERE Run `brew upgrade --cask claude-launcher` so the installed
+      copy matches v1.0.3
+- [ ] `-n/--name` flag (sets session name *and* Terminal window title —
       pairs naturally with the colour themes)
 - [ ] Session control: `--continue` / `--resume` / `--fork-session`
 - [ ] Advanced disclosure: worktree, add-dir, agent, ide, safe-mode, verbose
@@ -64,4 +76,7 @@ Repo: https://github.com/jamisonhill/claude-launcher (public, MIT)
   `homebrew-tap/Casks/claude-launcher.rb` are overwritten on the next release;
   edit `Casks/claude-launcher.rb.template` here instead.
 - Picking a theme installs `Claude — <name>` profiles into Terminal. The
-  user's own profiles are read but never modified.
+  user's own profiles are read but never modified. Roughly a dozen legacy
+  `Claude - <name>` profiles from the hyphen era are still in Terminal →
+  Settings → Profiles, along with `ThemeTest2`, `ThemeTest3` and `quoteprobe`
+  from dev. They're filtered out of the picker now; deleting them is cosmetic.
