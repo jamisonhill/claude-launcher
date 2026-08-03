@@ -385,6 +385,11 @@ private struct LaunchPanel: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
 
+                if let note = store.resumeNote {
+                    ResumeNoteBanner(note: note)
+                        .padding(.top, 3)
+                }
+
                 HStack(spacing: 14) {
                     Label(project.isGitRepo ? "git repo" : "no git repo",
                           systemImage: "arrow.triangle.branch")
@@ -576,6 +581,76 @@ private struct OptionCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Where the project left off, from its `.planning/RESUME.md`.
+///
+/// Sits directly under the path because it answers the question you actually
+/// have when picking a project — is this one ready to work on, or waiting on
+/// something? A blocked project is tinted so it reads differently from one
+/// with a step ready to take.
+private struct ResumeNoteBanner: View {
+    let note: ResumeNote
+
+    private var icon: String {
+        switch note.kind {
+        case .blocked: return "exclamationmark.triangle.fill"
+        case .nextStep: return "arrow.forward.circle"
+        case .context: return "pause.circle"
+        }
+    }
+
+    private var tint: Color {
+        switch note.kind {
+        case .blocked: return .orange
+        case .nextStep: return .secondary
+        case .context: return .secondary
+        }
+    }
+
+    private var label: String {
+        switch note.kind {
+        case .blocked: return "Blocked"
+        case .nextStep: return "Next"
+        case .context: return "Paused"
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundStyle(tint)
+                // Keep the glyph on the first line of wrapped text.
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label.uppercased())
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .tracking(0.6)
+
+                Text(note.summary)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    // Two lines is enough for the gist; the tooltip has the
+                    // rest, and the note itself is one click away in Finder.
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(note.kind == .blocked
+                      ? Color.orange.opacity(0.10)
+                      : Color.secondary.opacity(0.07))
+        )
+        .help(note.pausedDate.map { "\(note.summary)\n\nPaused \($0)" } ?? note.summary)
     }
 }
 

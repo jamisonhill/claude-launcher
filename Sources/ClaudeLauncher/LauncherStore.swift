@@ -32,6 +32,10 @@ final class LauncherStore: ObservableObject {
     @Published private(set) var candidates: [ProjectCandidate] = []
     @Published private(set) var isScanning = false
 
+    /// Where the selected project left off, read from its `.planning/RESUME.md`.
+    /// Nil when the project has no note or the note has nothing to say.
+    @Published private(set) var resumeNote: ResumeNote?
+
     @Published private(set) var claudePath: String?
     @Published private(set) var availableThemes: [String] = []
     @Published private(set) var sectionExpanded: [String: Bool] = [:]
@@ -368,6 +372,10 @@ final class LauncherStore: ObservableObject {
         terminalTheme = prefs.terminalTheme[project.path]
             .flatMap { availableThemes.contains($0) ? $0 : nil }
         lastLaunchNote = nil
+        // Read on selection rather than caching at load: the note changes
+        // outside the app, whenever a session ends, and these files are small
+        // enough that re-reading one is cheaper than tracking staleness.
+        resumeNote = ResumeNote.load(forProjectAt: project.path)
     }
 
     // MARK: - Launching

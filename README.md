@@ -119,6 +119,29 @@ modes makes `plan` and `acceptEdits` reachable at launch.
 Every choice is remembered per project, and the exact command is shown under
 **Will run** before you launch.
 
+## Where you left off
+
+If a project has a `.planning/RESUME.md`, a one-line summary of it appears under
+the path, so you can tell before launching whether a project is ready to work on
+or waiting on something.
+
+The line is picked in priority order:
+
+1. **Blocked** — a line beginning `Blocked:` or `Blocker:`. Shown in amber.
+   Matching is anchored to the start of the line on purpose; searching for the
+   word anywhere would read "There is **no blocker**" as the opposite of what it
+   says.
+2. **Next** — the first still-open item under a `## Next action` / `## Next
+   steps` heading. Items already marked `DONE`, `✅` or `~~struck through~~` are
+   skipped along with their sub-bullets, as are lines that only introduce a list
+   ("In rough order:"), since the real item is on the line after.
+3. **Paused** — the `**Reason:**` or `**Status:**` field, as context, when the
+   note records no next step.
+
+Notes are re-read each time you select a project, because they change outside
+the app whenever a session ends. A project with no note simply shows nothing —
+that is the normal case, not an error.
+
 ## Terminal themes
 
 Pick a colour scheme per project so concurrent sessions are tellable apart at a
