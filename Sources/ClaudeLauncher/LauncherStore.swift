@@ -361,7 +361,12 @@ final class LauncherStore: ObservableObject {
         selectedModel = prefs.lastModel[project.path] ?? .opus
         permissionMode = prefs.permissionMode[project.path] ?? .defaultMode
         effort = prefs.effort[project.path]
+        // A theme saved before the picker narrowed to five dark ones may no
+        // longer be on offer. Dropping it keeps the window's colours and the
+        // selected swatch in agreement; otherwise the project would go on
+        // launching in a theme with nothing in the picker showing as picked.
         terminalTheme = prefs.terminalTheme[project.path]
+            .flatMap { availableThemes.contains($0) ? $0 : nil }
         lastLaunchNote = nil
     }
 

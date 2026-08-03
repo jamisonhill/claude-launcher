@@ -124,9 +124,17 @@ Every choice is remembered per project, and the exact command is shown under
 Pick a colour scheme per project so concurrent sessions are tellable apart at a
 glance. The window is also titled after the project.
 
-Themes are read from the profiles already installed in Terminal (Basic, Grass,
-Homebrew, Novel, Ocean, Pro, plus anything custom), so the palette matches what
-you already know and stays correct on a machine with a different set.
+Themes are read from the profiles already installed in Terminal, so the palette
+matches what you already know and stays correct on a machine with a different
+set.
+
+The picker offers **dark profiles only, capped at five**. Light backgrounds are
+excluded by measuring each profile's background luminance rather than matching
+names, so custom profiles are judged the same way the stock ones are. When more
+than five dark profiles are installed, the five kept are the ones whose
+backgrounds are furthest apart — Terminal ships several with pure black
+backgrounds, and a second indistinguishable black swatch spends a slot without
+helping you tell two windows apart.
 
 **How it works.** Terminal reads `.terminal` files — plists describing a window
 profile. A profile can carry a `CommandString`, so opening one gets us a new
