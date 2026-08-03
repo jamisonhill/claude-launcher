@@ -78,12 +78,18 @@ struct ResumeNote: Equatable {
 
     /// Finds an explicitly labelled blocker.
     ///
-    /// Matching requires the line to *begin* with the label. Searching for the
-    /// word anywhere would misread "There is **no blocker** and nothing
-    /// half-finished" — a sentence that means the exact opposite — as a
-    /// blocked project.
+    /// The label has to open an item, not merely open a line. Two ways this
+    /// goes wrong, both seen in real notes:
+    ///
+    /// - Searching for the word anywhere misreads "There is **no blocker** and
+    ///   nothing half-finished" as a blocked project.
+    /// - Anchoring to the start of any line misreads a wrapped continuation.
+    ///   A bullet reading "…writing `Blocked:` in the note is the reliable fix"
+    ///   happens to wrap so that its second line starts with the label, which
+    ///   flagged this very project as blocked by its own advice about blockers.
     private static func blockedLine(in lines: [String]) -> String? {
         for (index, line) in lines.enumerated() {
+            guard startsItem(at: index, in: lines) else { continue }
             let stripped = plainText(stripListMarker(line))
             guard let range = stripped.range(of: #"^(Blocked|Blocker)\b[:—-]"#,
                                              options: [.regularExpression, .caseInsensitive])
@@ -140,6 +146,23 @@ struct ResumeNote: Equatable {
             return text
         }
         return nil
+    }
+
+    /// Whether a line opens an item rather than continuing the one above it.
+    ///
+    /// Either it carries a list marker, or it is flush-left prose that follows
+    /// a blank line or a heading. Anything else is a wrapped continuation, and
+    /// whatever word it happens to begin with is mid-sentence.
+    private static func startsItem(at index: Int, in lines: [String]) -> Bool {
+        let line = lines[index]
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return false }
+        if startsNewItem(trimmed) { return true }
+        if indentWidth(line) > 0 { return false }
+
+        guard index > 0 else { return true }
+        let previous = lines[index - 1].trimmingCharacters(in: .whitespaces)
+        return previous.isEmpty || previous.hasPrefix("#")
     }
 
     /// Whether an item has already been done, and so isn't a next step.

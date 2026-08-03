@@ -116,6 +116,20 @@ Permissions defaults to **Bypass All**, which is exactly what the old
 `--permission-mode bypassPermissions` are the same thing. Exposing the real
 modes makes `plan` and `acceptEdits` reachable at launch.
 
+**First command** optionally runs `/start` or `/resume-work` as the session's
+opening prompt, so resuming begins as the window opens rather than after typing
+the same thing every time. Defaults to **None**.
+
+Claude takes a positional prompt after its flags, and a prompt beginning with
+`/` runs as a slash command rather than arriving as literal text:
+
+```
+claude --model claude-opus-5 --permission-mode bypassPermissions /resume-work
+```
+
+The prompt is appended last, since a positional argument has to follow every
+flag.
+
 Every choice is remembered per project, and the exact command is shown under
 **Will run** before you launch.
 

@@ -108,6 +108,36 @@ enum EffortLevel: String, CaseIterable, Identifiable, Codable {
     static let unsetLabel = "Default"
 }
 
+// MARK: - First command
+
+/// A slash command to run as the session's opening prompt.
+///
+/// Claude takes a positional prompt after its flags, and a prompt beginning
+/// with "/" runs as a slash command rather than arriving as literal text — so
+/// resuming can start the moment the window opens instead of after typing the
+/// same thing every time.
+enum FirstCommand: String, CaseIterable, Identifiable, Codable {
+    case start
+    case resumeWork
+
+    var id: String { rawValue }
+
+    /// The prompt handed to Claude.
+    var prompt: String {
+        switch self {
+        case .start:      return "/start"
+        case .resumeWork: return "/resume-work"
+        }
+    }
+
+    /// Shown on the picker; the leading slash makes it obvious these run as
+    /// commands rather than being typed into the session.
+    var displayName: String { prompt }
+
+    /// Nil means start the session with no opening prompt, which is the default.
+    static let unsetLabel = "None"
+}
+
 // MARK: - Projects
 
 /// A curated project the user has explicitly chosen to keep in their library.

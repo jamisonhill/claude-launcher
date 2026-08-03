@@ -24,6 +24,7 @@ final class LauncherStore: ObservableObject {
     @Published var permissionMode: PermissionMode = .defaultMode
     @Published var effort: EffortLevel?
     @Published var terminalTheme: String?
+    @Published var firstCommand: FirstCommand?
 
     // Transient UI state
     @Published var errorMessage: String?
@@ -117,7 +118,8 @@ final class LauncherStore: ObservableObject {
         LaunchOptions(model: selectedModel,
                       permissionMode: permissionMode,
                       effort: effort,
-                      terminalTheme: terminalTheme)
+                      terminalTheme: terminalTheme,
+                      firstCommand: firstCommand)
     }
 
     var commandPreview: String {
@@ -371,6 +373,7 @@ final class LauncherStore: ObservableObject {
         // launching in a theme with nothing in the picker showing as picked.
         terminalTheme = prefs.terminalTheme[project.path]
             .flatMap { availableThemes.contains($0) ? $0 : nil }
+        firstCommand = prefs.firstCommand[project.path]
         lastLaunchNote = nil
         // Read on selection rather than caching at load: the note changes
         // outside the app, whenever a session ends, and these files are small
@@ -392,6 +395,7 @@ final class LauncherStore: ObservableObject {
             prefs.permissionMode[project.path] = permissionMode
             prefs.effort[project.path] = effort
             prefs.terminalTheme[project.path] = terminalTheme
+            prefs.firstCommand[project.path] = firstCommand
             prefs.lastUsed[project.path] = Date()
             prefs.save()
 

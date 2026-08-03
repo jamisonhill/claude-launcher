@@ -21,6 +21,8 @@ struct LaunchOptions {
     var effort: EffortLevel?
     /// Terminal profile name to colour the window with, or nil for the default.
     var terminalTheme: String?
+    /// Slash command to run as the opening prompt, or nil to start empty.
+    var firstCommand: FirstCommand?
 }
 
 enum Launcher {
@@ -100,6 +102,11 @@ enum Launcher {
                     "--permission-mode", options.permissionMode.flagValue]
         if let effort = options.effort {
             args += ["--effort", effort.flagValue]
+        }
+        // The prompt is positional and must come after every flag, so it stays
+        // last. Claude runs a prompt starting with "/" as a slash command.
+        if let firstCommand = options.firstCommand {
+            args.append(firstCommand.prompt)
         }
         return args
     }

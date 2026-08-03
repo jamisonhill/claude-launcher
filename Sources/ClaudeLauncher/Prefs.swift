@@ -128,6 +128,8 @@ struct Prefs: Codable {
     var effort: [String: EffortLevel] = [:]
     /// Terminal profile name chosen per project, e.g. "Ocean".
     var terminalTheme: [String: String] = [:]
+    /// Absent means the session opens with no prompt, which is the default.
+    var firstCommand: [String: FirstCommand] = [:]
     var lastUsed: [String: Date] = [:]
     var favorites: [String] = []
 
@@ -137,7 +139,7 @@ struct Prefs: Codable {
     var sectionExpanded: [String: Bool] = [:]
 
     private enum CodingKeys: String, CodingKey {
-        case lastModel, permissionMode, effort, terminalTheme
+        case lastModel, permissionMode, effort, terminalTheme, firstCommand
         case lastUsed, favorites, sectionExpanded
     }
 
@@ -149,6 +151,7 @@ struct Prefs: Codable {
         permissionMode = try c.decodeIfPresent([String: PermissionMode].self, forKey: .permissionMode) ?? [:]
         effort = try c.decodeIfPresent([String: EffortLevel].self, forKey: .effort) ?? [:]
         terminalTheme = try c.decodeIfPresent([String: String].self, forKey: .terminalTheme) ?? [:]
+        firstCommand = try c.decodeIfPresent([String: FirstCommand].self, forKey: .firstCommand) ?? [:]
         lastUsed = try c.decodeIfPresent([String: Date].self, forKey: .lastUsed) ?? [:]
         favorites = try c.decodeIfPresent([String].self, forKey: .favorites) ?? []
         sectionExpanded = try c.decodeIfPresent([String: Bool].self, forKey: .sectionExpanded) ?? [:]

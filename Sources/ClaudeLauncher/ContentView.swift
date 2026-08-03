@@ -353,6 +353,7 @@ private struct LaunchPanel: View {
                 modelPicker
                 permissionPicker
                 effortPicker
+                firstCommandPicker
                 themePicker
                 launchButton
                 commandPreview
@@ -459,6 +460,31 @@ private struct LaunchPanel: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(maxWidth: contentWidth)
+        }
+    }
+
+    private var firstCommandPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel("FIRST COMMAND")
+            Picker("", selection: Binding(
+                get: { store.firstCommand },
+                set: { store.firstCommand = $0 })) {
+                Text(FirstCommand.unsetLabel).tag(FirstCommand?.none)
+                ForEach(FirstCommand.allCases) { command in
+                    Text(command.displayName).tag(FirstCommand?.some(command))
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: contentWidth)
+
+            Text("""
+                 Runs as the session's opening prompt, so resuming starts as \
+                 soon as the window opens.
+                 """)
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

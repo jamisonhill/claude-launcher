@@ -57,8 +57,12 @@ Repo: https://github.com/jamisonhill/claude-launcher (public, MIT)
 - [x] **Resume-note summary** under the project path — parses
       `.planning/RESUME.md` for a blocker, else the first still-open next
       action, else Reason/Status. Verified against all 38 notes under `~/Ai`.
+- [x] **First-command picker** — None / `/start` / `/resume-work`, run as the
+      session's opening prompt. Also fixed a false BLOCKED reading: a wrapped
+      continuation line starting with `` `Blocked:` `` was matching, so this
+      project's own note about blockers marked it blocked.
 - [ ] ← PAUSED HERE Run `brew upgrade --cask claude-launcher` so the installed
-      copy matches v1.0.3
+      copy matches the shipped version (needs a new release for the above)
 - [ ] `-n/--name` flag (sets session name *and* Terminal window title —
       pairs naturally with the colour themes)
 - [ ] Session control: `--continue` / `--resume` / `--fork-session`
