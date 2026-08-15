@@ -20,11 +20,18 @@ final class LauncherStore: ObservableObject {
     @Published var searchText: String = ""
 
     // Launch choices for the current selection
-    @Published var selectedModel: ClaudeModel = .opus
-    @Published var permissionMode: PermissionMode = .defaultMode
-    @Published var effort: EffortLevel?
+    @Published private(set) var selectedTool: AITool = .claude
+    @Published var modelID: String?
+    @Published var permissionID: String?
+    @Published var effortID: String?
     @Published var terminalTheme: String?
     @Published var firstCommand: FirstCommand?
+
+    /// Tools that are installed and switched on, in registry order.
+    @Published private(set) var availableTools: [ResolvedTool] = []
+    /// Every known tool including the missing and the disabled — Settings needs
+    /// to show what wasn't found so the absence is explicable.
+    @Published private(set) var allTools: [ResolvedTool] = []
 
     // Transient UI state
     @Published var errorMessage: String?
@@ -37,7 +44,6 @@ final class LauncherStore: ObservableObject {
     /// Nil when the project has no note or the note has nothing to say.
     @Published private(set) var resumeNote: ResumeNote?
 
-    @Published private(set) var claudePath: String?
     @Published private(set) var availableThemes: [String] = []
     @Published private(set) var sectionExpanded: [String: Bool] = [:]
     @Published private(set) var roots: [String] = []
@@ -45,6 +51,12 @@ final class LauncherStore: ObservableObject {
     private var config: Config
     private var library: Library
     private var prefs: Prefs
+    private(set) var toolSettings: ToolSettings
+
+    /// Where the selected tool's binary lives, or nil if it isn't installed.
+    var selectedToolPath: String? {
+        availableTools.first { $0.id == selectedTool.id }?.path
+    }
 
     static let favoritesSection = "FAVORITES"
     static let recentSection = "RECENT"
@@ -54,8 +66,9 @@ final class LauncherStore: ObservableObject {
         self.config = Config.load()
         self.library = Library.load()
         self.prefs = Prefs.load()
-        self.claudePath = Launcher.findClaudeExecutable()
+        self.toolSettings = ToolSettings.load()
         self.availableThemes = TerminalThemes.availableProfileNames()
+        refreshTools()
 
         self.projects = library.projects
         self.sections = library.sections
@@ -115,9 +128,10 @@ final class LauncherStore: ObservableObject {
     }
 
     var launchOptions: LaunchOptions {
-        LaunchOptions(model: selectedModel,
-                      permissionMode: permissionMode,
-                      effort: effort,
+        LaunchOptions(tool: selectedTool,
+                      modelID: modelID,
+                      permissionID: permissionID,
+                      effortID: effortID,
                       terminalTheme: terminalTheme,
                       firstCommand: firstCommand)
     }
@@ -126,7 +140,124 @@ final class LauncherStore: ObservableObject {
         guard let project = selectedProject else { return "" }
         return Launcher.commandPreview(project: project,
                                        options: launchOptions,
-                                       claudePath: claudePath)
+                                       toolPath: selectedToolPath)
+    }
+
+    // MARK: - Tools
+
+    /// Re-scans for installed tools and reconciles the current selection.
+    ///
+    /// Called at launch and whenever tool settings change, so enabling a tool
+    /// or installing one takes effect without restarting the app.
+    func refreshTools() {
+        allTools = ToolRegistry.resolveAll(settings: toolSettings)
+        availableTools = ToolRegistry.selectable(settings: toolSettings)
+
+        // Keep the selection valid: if the chosen tool was disabled, removed,
+        // or uninstalled, fall back rather than leaving a dangling definition
+        // that would launch nothing.
+        if let current = availableTools.first(where: { $0.id == selectedTool.id }) {
+            selectedTool = current.tool
+        } else if let project = selectedProject {
+            selectTool(defaultToolID(for: project), for: project, persist: false)
+        } else if let first = availableTools.first {
+            selectedTool = first.tool
+        }
+    }
+
+    /// The tool a project should open with: whatever it last used, if that is
+    /// still available, else the first one that is.
+    private func defaultToolID(for project: Project) -> String {
+        let stored = prefs.tool[project.path] ?? AITool.claude.id
+        if availableTools.contains(where: { $0.id == stored }) { return stored }
+        return availableTools.first?.id ?? AITool.claude.id
+    }
+
+    /// Switches the selected tool and restores that tool's own options for the
+    /// project, so moving between tools doesn't overwrite either one's setup.
+    func selectTool(_ toolID: String, for project: Project, persist: Bool = true) {
+        guard let resolved = availableTools.first(where: { $0.id == toolID })
+                ?? allTools.first(where: { $0.id == toolID }) else { return }
+        selectedTool = resolved.tool
+        restoreOptions(for: project, tool: resolved.tool)
+
+        if persist {
+            prefs.tool[project.path] = toolID
+            prefs.save()
+        }
+    }
+
+    /// Loads the stored option ids for a project/tool pair, falling back to the
+    /// group defaults. A stored id that isn't valid for this tool is discarded
+    /// rather than passed through, which is what keeps an old Claude value from
+    /// becoming a bogus flag on another CLI.
+    private func restoreOptions(for project: Project, tool: AITool) {
+        let key = Prefs.optionKey(project: project.path, tool: tool.id)
+
+        func restore(_ group: OptionGroup?, _ stored: String?) -> String? {
+            guard let group else { return nil }
+            if let stored, group.options.contains(where: { $0.id == stored }) { return stored }
+            return group.allowsUnset ? nil : group.defaultOptionID
+        }
+
+        modelID = restore(tool.modelGroup, prefs.lastModel[key])
+        permissionID = restore(tool.permissionGroup, prefs.permissionMode[key])
+        effortID = restore(tool.effortGroup, prefs.effort[key])
+        firstCommand = tool.supportsFirstCommand ? prefs.firstCommand[project.path] : nil
+    }
+
+    func setToolEnabled(_ toolID: String, _ enabled: Bool) {
+        var disabled = Set(toolSettings.disabledToolIDs)
+        if enabled { disabled.remove(toolID) } else { disabled.insert(toolID) }
+        toolSettings.disabledToolIDs = disabled.sorted()
+        toolSettings.save()
+        refreshTools()
+    }
+
+    func setExtraArguments(_ raw: String, for toolID: String) {
+        // Split on whitespace: enough for the flag pairs this field is for, and
+        // predictable. Anything needing embedded spaces belongs in a wrapper
+        // script rather than a settings field pretending to be a shell.
+        let parts = raw.split(whereSeparator: \.isWhitespace).map(String.init)
+        if parts.isEmpty {
+            toolSettings.extraArguments.removeValue(forKey: toolID)
+        } else {
+            toolSettings.extraArguments[toolID] = parts
+        }
+        toolSettings.save()
+        refreshTools()
+        if let project = selectedProject { selectTool(selectedTool.id, for: project, persist: false) }
+    }
+
+    func extraArgumentsText(for toolID: String) -> String {
+        (toolSettings.extraArguments[toolID] ?? []).joined(separator: " ")
+    }
+
+    func addCustomTool(name: String, binary: String, arguments: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        let trimmedBinary = binary.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty, !trimmedBinary.isEmpty else { return }
+
+        // Derive a stable id from the name, keeping it distinct from built-ins
+        // and from any custom tool already defined.
+        let base = trimmedName.lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        var id = base.isEmpty ? "custom" : base
+        let taken = Set(allTools.map(\.id))
+        var suffix = 2
+        while taken.contains(id) { id = "\(base)-\(suffix)"; suffix += 1 }
+
+        let tool = AITool(id: id, name: trimmedName, binary: trimmedBinary, isBuiltIn: false)
+        toolSettings.customTools.append(tool)
+        setExtraArguments(arguments, for: id)   // saves and refreshes
+    }
+
+    func removeCustomTool(_ toolID: String) {
+        toolSettings.customTools.removeAll { $0.id == toolID }
+        toolSettings.extraArguments.removeValue(forKey: toolID)
+        toolSettings.save()
+        refreshTools()
     }
 
     func lastUsedDescription(for project: Project) -> String? {
@@ -364,16 +495,15 @@ final class LauncherStore: ObservableObject {
     /// Selects a project and restores whatever launch settings were used there.
     func select(_ project: Project) {
         selectedPath = project.path
-        selectedModel = prefs.lastModel[project.path] ?? .opus
-        permissionMode = prefs.permissionMode[project.path] ?? .defaultMode
-        effort = prefs.effort[project.path]
+        // Restores the tool this project last used along with that tool's own
+        // options; persist:false because selecting isn't a change worth writing.
+        selectTool(defaultToolID(for: project), for: project, persist: false)
         // A theme saved before the picker narrowed to five dark ones may no
         // longer be on offer. Dropping it keeps the window's colours and the
         // selected swatch in agreement; otherwise the project would go on
         // launching in a theme with nothing in the picker showing as picked.
         terminalTheme = prefs.terminalTheme[project.path]
             .flatMap { availableThemes.contains($0) ? $0 : nil }
-        firstCommand = prefs.firstCommand[project.path]
         lastLaunchNote = nil
         // Read on selection rather than caching at load: the note changes
         // outside the app, whenever a session ends, and these files are small
@@ -391,15 +521,21 @@ final class LauncherStore: ObservableObject {
 
             // Only record the launch once it actually succeeded, so a failed
             // attempt doesn't pollute the Recent list.
-            prefs.lastModel[project.path] = selectedModel
-            prefs.permissionMode[project.path] = permissionMode
-            prefs.effort[project.path] = effort
+            let key = Prefs.optionKey(project: project.path, tool: selectedTool.id)
+            prefs.tool[project.path] = selectedTool.id
+            prefs.lastModel[key] = modelID
+            prefs.permissionMode[key] = permissionID
+            prefs.effort[key] = effortID
             prefs.terminalTheme[project.path] = terminalTheme
             prefs.firstCommand[project.path] = firstCommand
             prefs.lastUsed[project.path] = Date()
             prefs.save()
 
-            lastLaunchNote = "Launched \(project.name) with \(selectedModel.displayName)"
+            // Name the model when the tool has one, else just the tool — the
+            // old note assumed every launch had a model to report.
+            let model = selectedTool.modelGroup?.option(id: modelID)?.displayName
+            lastLaunchNote = model.map { "Launched \(project.name) with \(selectedTool.name) · \($0)" }
+                ?? "Launched \(project.name) with \(selectedTool.name)"
         } catch {
             errorMessage = error.localizedDescription
         }

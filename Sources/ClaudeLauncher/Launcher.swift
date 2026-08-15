@@ -15,10 +15,13 @@ import Foundation
 
 /// Everything the user chose in the launch panel.
 struct LaunchOptions {
-    var model: ClaudeModel = .opus
-    var permissionMode: PermissionMode = .defaultMode
-    /// Nil means don't pass `--effort` at all.
-    var effort: EffortLevel?
+    /// The CLI being launched. Its definition decides which of the ids below
+    /// mean anything, and what flags they turn into.
+    var tool: AITool = .claude
+    /// Selected option ids, or nil where the group is unset or absent.
+    var modelID: String?
+    var permissionID: String?
+    var effortID: String?
     /// Terminal profile name to colour the window with, or nil for the default.
     var terminalTheme: String?
     /// Slash command to run as the opening prompt, or nil to start empty.
@@ -29,7 +32,7 @@ enum Launcher {
 
     enum LaunchError: LocalizedError {
         case missingDirectory(String)
-        case claudeNotFound
+        case toolNotFound(String)
         case scriptWriteFailed(String)
         case terminalLaunchFailed(String)
 
@@ -37,8 +40,8 @@ enum Launcher {
             switch self {
             case .missingDirectory(let path):
                 return "That folder no longer exists:\n\(path)"
-            case .claudeNotFound:
-                return "Couldn't find the `claude` executable in any of the usual locations."
+            case .toolNotFound(let binary):
+                return "Couldn't find the `\(binary)` executable in any of the usual locations."
             case .scriptWriteFailed(let reason):
                 return "Couldn't write the launch script: \(reason)"
             case .terminalLaunchFailed(let reason):
@@ -49,21 +52,13 @@ enum Launcher {
 
     // MARK: - Locating the CLI
 
-    private static let candidateClaudePaths = [
-        "~/.local/bin/claude",
-        "/opt/homebrew/bin/claude",
-        "/usr/local/bin/claude",
-        "~/.bun/bin/claude",
-        "~/.npm-global/bin/claude"
-    ]
-
-    /// Resolves an absolute path to the `claude` binary.
+    /// Resolves an absolute path to a tool's binary.
     ///
     /// Resolved up front rather than relying on the script's PATH, so a missing
     /// CLI produces a clear dialog instead of a Terminal window that flashes
     /// "command not found" and vanishes.
-    static func findClaudeExecutable() -> String? {
-        for candidate in candidateClaudePaths {
+    static func findExecutable(for tool: AITool) -> String? {
+        for candidate in tool.candidatePaths {
             let expanded = (candidate as NSString).expandingTildeInPath
             if FileManager.default.isExecutableFile(atPath: expanded) {
                 return expanded
@@ -72,9 +67,14 @@ enum Launcher {
 
         // Last resort: ask a login shell, which picks up PATH changes made in
         // .zprofile / .zshrc that this GUI app doesn't otherwise inherit.
+        //
+        // `command -v` can name a path that doesn't exist (a stale shell hash,
+        // or a shell function), so the result is checked for executability
+        // rather than trusted — a tool reported as present but unrunnable is
+        // worse than one reported as missing.
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", "command -v claude"]
+        process.arguments = ["-l", "-c", "command -v -- \(shellQuote(tool.binary))"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -97,15 +97,29 @@ enum Launcher {
     // MARK: - Building the command
 
     /// The flags implied by a set of options, in a stable order.
+    ///
+    /// Built entirely from the tool's own definition, so a tool that has no
+    /// concept of (say) effort simply contributes no flag for it — there is no
+    /// path here that can emit a flag the selected CLI doesn't understand.
     static func arguments(for options: LaunchOptions) -> [String] {
-        var args = ["--model", options.model.modelID,
-                    "--permission-mode", options.permissionMode.flagValue]
-        if let effort = options.effort {
-            args += ["--effort", effort.flagValue]
+        let tool = options.tool
+        var args: [String] = []
+
+        func append(_ group: OptionGroup?, _ selectedID: String?) {
+            guard let group, let option = group.option(id: selectedID) else { return }
+            args += [group.flag, option.flagValue]
         }
+
+        append(tool.modelGroup, options.modelID)
+        append(tool.permissionGroup, options.permissionID)
+        append(tool.effortGroup, options.effortID)
+
+        args += tool.extraArguments
+
         // The prompt is positional and must come after every flag, so it stays
-        // last. Claude runs a prompt starting with "/" as a slash command.
-        if let firstCommand = options.firstCommand {
+        // last. Claude runs a prompt starting with "/" as a slash command;
+        // tools without that convention don't offer the control at all.
+        if tool.supportsFirstCommand, let firstCommand = options.firstCommand {
             args.append(firstCommand.prompt)
         }
         return args
@@ -116,10 +130,25 @@ enum Launcher {
     /// can't drift from what actually executes.
     static func commandPreview(project: Project,
                                options: LaunchOptions,
-                               claudePath: String?) -> String {
-        let claude = claudePath.map { shellQuote($0) } ?? "claude"
-        let flags = arguments(for: options).joined(separator: " ")
-        return "cd \(shellQuote(project.path)) && \(claude) \(flags)"
+                               toolPath: String?) -> String {
+        let binary = toolPath.map { shellQuote($0) } ?? options.tool.binary
+        let flags = arguments(for: options).map(shellQuoteIfNeeded).joined(separator: " ")
+        let trailing = flags.isEmpty ? "" : " \(flags)"
+        return "cd \(shellQuote(project.path)) && \(binary)\(trailing)"
+    }
+
+    /// Quotes only tokens that actually need it.
+    ///
+    /// The generated script quotes everything, which is correct but reads
+    /// badly in the preview ('--model' 'claude-opus-5'). Plain flags are left
+    /// bare; anything with whitespace or shell metacharacters — which the
+    /// user's own extra arguments may well contain — is quoted, so the preview
+    /// still shows exactly how the shell will read the line.
+    static func shellQuoteIfNeeded(_ value: String) -> String {
+        let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_./:=@+,"))
+        let needsQuoting = value.isEmpty
+            || value.unicodeScalars.contains { !safe.contains($0) }
+        return needsQuoting ? shellQuote(value) : value
     }
 
     /// Wraps a string in single quotes, safely, for use in a shell command.
@@ -138,8 +167,8 @@ enum Launcher {
             throw LaunchError.missingDirectory(project.path)
         }
 
-        guard let claudePath = findClaudeExecutable() else {
-            throw LaunchError.claudeNotFound
+        guard let toolPath = findExecutable(for: options.tool) else {
+            throw LaunchError.toolNotFound(options.tool.binary)
         }
 
         let safeName = project.name.replacingOccurrences(
@@ -150,13 +179,13 @@ enum Launcher {
         let flags = arguments(for: options).map(shellQuote).joined(separator: " ")
 
         // `-l` runs a login shell so the session gets the normal environment.
-        // `exec` replaces the shell with Claude, so quitting Claude closes the
+        // `exec` replaces the shell with the tool, so quitting it closes the
         // session cleanly instead of dropping you into a leftover subshell.
         let script = """
         #!/bin/zsh -l
         cd \(shellQuote(project.path)) || exit 1
         clear
-        exec \(shellQuote(claudePath)) \(flags)
+        exec \(shellQuote(toolPath)) \(flags)
         """
 
         do {

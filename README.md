@@ -1,8 +1,11 @@
 # Claude Launcher
 
-A native macOS app for starting Claude Code sessions. Pick a project, set the
-options, hit Launch — a Terminal window opens in that folder, in the colour
-scheme you chose, with Claude already running.
+A native macOS app for starting AI coding sessions in Terminal. Pick a project,
+pick a tool, set the options, hit Launch — a Terminal window opens in that
+folder, in the colour scheme you chose, with the session already running.
+
+Claude Code is the default and the best-supported; Gemini CLI ships built in
+too, and any other CLI can be added in Settings.
 
 ## Build
 
@@ -103,7 +106,53 @@ grouping that cuts across directories.
 
 Favorites and Recent open by default; your own sections start collapsed.
 
+## AI tools
+
+The app is not Claude-only. It launches any CLI it has a definition for, and
+the launch panel re-renders to show **only the options that tool actually
+understands** — no control appears that would produce a flag the CLI would
+reject.
+
+Two tools ship built in:
+
+| Tool | Options offered |
+| --- | --- |
+| **Claude Code** | Model, Permissions, Effort, First command |
+| **Gemini CLI** | Approval mode |
+
+Gemini gets an approval-mode picker because `gemini --help` enumerates its
+values. It gets no model picker: the `-m` flag exists, but the CLI publishes no
+list of accepted model names, and a picker of guessed names would produce a
+window that dies on launch. Set one through the tool's **extra arguments**
+instead.
+
+That rule holds throughout — **no flag in this app is taken from documentation
+alone.** Anything unverified belongs in a custom tool, where the flags come
+from the person who can actually run it.
+
+### Adding a tool
+
+**Settings → AI Tools → Add Tool…** takes a name, a command, and the arguments
+to pass every time. That's the route for Codex or anything else:
+
+```
+Name       Codex
+Command    codex
+Arguments  --full-auto
+```
+
+A built-in can be given extra arguments the same way, and switched off entirely
+if you don't want it in the picker.
+
+Tools are detected, not assumed: one appears only once its binary is found, so
+the picker never offers something that can't run. The tool chooser hides itself
+when only one tool is installed. Which tool a project uses is remembered per
+project, along with that tool's own options — trying Gemini on a project and
+switching back leaves your Claude settings exactly as they were.
+
 ## Launch options
+
+Claude Code's controls:
 
 | Control | Flag |
 | --- | --- |
@@ -207,15 +256,19 @@ clear dialog instead of a window that flashes "command not found" and vanishes.
 
 **Settings** (⌘,) manages your main folders and re-runs the project picker.
 
-Three JSON files in `~/Library/Application Support/ClaudeLauncher/`:
+Four JSON files in `~/Library/Application Support/ClaudeLauncher/`:
 
 - **`config.json`** — main folders to search, and exclusions.
 - **`library.json`** — your curated projects and your sections.
-- **`prefs.json`** — per-project model, permission mode, effort, theme,
+- **`prefs.json`** — per-project tool, model, permission mode, effort, theme,
   favorites, recency, and which sections are open.
+- **`tools.json`** — custom tools you've added, extra arguments per tool, and
+  which built-ins you've switched off.
 
-All three decode field-by-field, so a file written by a newer version can't fail
-to load and silently reset your setup. There are no default folders: the app has
+All four decode field-by-field, so a file written by a newer version can't fail
+to load and silently reset your setup. Option choices in `prefs.json` are keyed
+by project for Claude and by project-and-tool for everything else, which is why
+a `prefs.json` written before multi-tool support keeps every setting it had. There are no default folders: the app has
 no way to know where a given person keeps their code.
 
 ## Keyboard
@@ -243,5 +296,7 @@ Sources/ClaudeLauncher/
   TerminalThemes.swift             reads Terminal profiles, writes .terminal
   ProjectScanner.swift             candidate discovery
   Prefs.swift                      config / library / prefs models
-  Models.swift                     models, flags, Project, sections
+  Models.swift                     Project, candidates, sections
+  AITools.swift                    tool definitions and their option groups
+  ToolRegistry.swift               detection, enable/disable, custom tools
 ```

@@ -25,6 +25,7 @@ enum AppPaths {
     static var configFile: URL { supportDirectory.appendingPathComponent("config.json") }
     static var libraryFile: URL { supportDirectory.appendingPathComponent("library.json") }
     static var prefsFile: URL { supportDirectory.appendingPathComponent("prefs.json") }
+    static var toolsFile: URL { supportDirectory.appendingPathComponent("tools.json") }
 
     /// Generated launch scripts and Terminal profiles live here.
     static var sessionsDirectory: URL {
@@ -122,10 +123,23 @@ struct Library: Codable {
 /// Per-project launch choices and sidebar state.
 struct Prefs: Codable {
 
-    var lastModel: [String: ClaudeModel] = [:]
-    var permissionMode: [String: PermissionMode] = [:]
-    /// Absent means "don't pass --effort", letting Claude use its own default.
-    var effort: [String: EffortLevel] = [:]
+    /// Which AI tool a project launches with. Absent means Claude, so every
+    /// project predating multi-tool support keeps its old behaviour.
+    var tool: [String: String] = [:]
+
+    // The three option dictionaries below hold *option ids* rather than typed
+    // enum cases, because the set of valid values now depends on the tool.
+    // Claude's ids are unchanged ("opus", "bypassPermissions", "high"), so an
+    // existing prefs.json decodes with every per-project choice intact.
+    //
+    // They are keyed by `optionKey(project:tool:)`, not by path alone: Claude
+    // keeps the bare project path it has always used, and other tools get a
+    // suffixed key. That way trying Gemini on a project and switching back
+    // doesn't cost you the Claude settings you had there.
+    var lastModel: [String: String] = [:]
+    var permissionMode: [String: String] = [:]
+    /// Absent means "don't pass the effort flag", letting the tool decide.
+    var effort: [String: String] = [:]
     /// Terminal profile name chosen per project, e.g. "Ocean".
     var terminalTheme: [String: String] = [:]
     /// Absent means the session opens with no prompt, which is the default.
@@ -133,13 +147,22 @@ struct Prefs: Codable {
     var lastUsed: [String: Date] = [:]
     var favorites: [String] = []
 
+    /// Key under which a project's choices are stored for a given tool.
+    ///
+    /// The separator is a control character rather than something like "#",
+    /// which is perfectly legal in a macOS path and would let a project named
+    /// "foo#gemini" collide with another project's Gemini settings.
+    static func optionKey(project path: String, tool toolID: String) -> String {
+        toolID == AITool.claude.id ? path : "\(path)\u{1}\(toolID)"
+    }
+
     /// Sidebar sections the user has explicitly opened or closed. Only explicit
     /// choices are stored, so a section added later gets the sensible default
     /// rather than inheriting a stale entry.
     var sectionExpanded: [String: Bool] = [:]
 
     private enum CodingKeys: String, CodingKey {
-        case lastModel, permissionMode, effort, terminalTheme, firstCommand
+        case tool, lastModel, permissionMode, effort, terminalTheme, firstCommand
         case lastUsed, favorites, sectionExpanded
     }
 
@@ -147,9 +170,10 @@ struct Prefs: Codable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        lastModel = try c.decodeIfPresent([String: ClaudeModel].self, forKey: .lastModel) ?? [:]
-        permissionMode = try c.decodeIfPresent([String: PermissionMode].self, forKey: .permissionMode) ?? [:]
-        effort = try c.decodeIfPresent([String: EffortLevel].self, forKey: .effort) ?? [:]
+        tool = try c.decodeIfPresent([String: String].self, forKey: .tool) ?? [:]
+        lastModel = try c.decodeIfPresent([String: String].self, forKey: .lastModel) ?? [:]
+        permissionMode = try c.decodeIfPresent([String: String].self, forKey: .permissionMode) ?? [:]
+        effort = try c.decodeIfPresent([String: String].self, forKey: .effort) ?? [:]
         terminalTheme = try c.decodeIfPresent([String: String].self, forKey: .terminalTheme) ?? [:]
         firstCommand = try c.decodeIfPresent([String: FirstCommand].self, forKey: .firstCommand) ?? [:]
         lastUsed = try c.decodeIfPresent([String: Date].self, forKey: .lastUsed) ?? [:]

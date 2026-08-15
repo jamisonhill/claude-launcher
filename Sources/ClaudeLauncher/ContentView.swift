@@ -350,10 +350,21 @@ private struct LaunchPanel: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                modelPicker
-                permissionPicker
-                effortPicker
-                firstCommandPicker
+                toolPicker
+                // Groups come from the selected tool, so a CLI without a given
+                // concept simply has no control for it rather than a dead one.
+                if let group = store.selectedTool.modelGroup {
+                    cardGroup(group, selection: $store.modelID)
+                }
+                if let group = store.selectedTool.permissionGroup {
+                    cardGroup(group, selection: $store.permissionID)
+                }
+                if let group = store.selectedTool.effortGroup {
+                    segmentedGroup(group, selection: $store.effortID)
+                }
+                if store.selectedTool.supportsFirstCommand {
+                    firstCommandPicker
+                }
                 themePicker
                 launchButton
                 commandPreview
@@ -408,53 +419,67 @@ private struct LaunchPanel: View {
         }
     }
 
-    private var modelPicker: some View {
+    /// Tool chooser. Hidden when only one tool is installed, so the single-tool
+    /// setup this app started as looks exactly as it did before.
+    @ViewBuilder
+    private var toolPicker: some View {
+        if store.availableTools.count > 1, let project = store.selectedProject {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel("TOOL")
+                Picker("", selection: Binding(
+                    get: { store.selectedTool.id },
+                    set: { store.selectTool($0, for: project) })) {
+                    ForEach(store.availableTools) { resolved in
+                        Text(resolved.tool.name).tag(resolved.id)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: contentWidth)
+            }
+        }
+    }
+
+    /// A group rendered as selectable cards, two across.
+    private func cardGroup(_ group: OptionGroup,
+                           selection: Binding<String?>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionLabel("MODEL")
+            SectionLabel(group.label)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
                                 GridItem(.flexible(), spacing: 8)],
                       spacing: 8) {
-                ForEach(ClaudeModel.allCases) { model in
-                    OptionCard(title: model.displayName,
-                               subtitle: model.subtitle,
-                               isSelected: store.selectedModel == model,
-                               isDangerous: false) {
-                        store.selectedModel = model
+                ForEach(group.options) { option in
+                    OptionCard(title: option.displayName,
+                               subtitle: option.subtitle,
+                               isSelected: selection.wrappedValue == option.id,
+                               isDangerous: option.isDangerous) {
+                        selection.wrappedValue = option.id
                     }
                 }
             }
             .frame(maxWidth: contentWidth)
-        }
-    }
 
-    private var permissionPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel("PERMISSIONS")
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
-                                GridItem(.flexible(), spacing: 8)],
-                      spacing: 8) {
-                ForEach(PermissionMode.allCases) { mode in
-                    OptionCard(title: mode.displayName,
-                               subtitle: mode.subtitle,
-                               isSelected: store.permissionMode == mode,
-                               isDangerous: mode.isDangerous) {
-                        store.permissionMode = mode
-                    }
-                }
+            if let footnote = group.footnote {
+                Text(footnote)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: contentWidth, alignment: .leading)
             }
-            .frame(maxWidth: contentWidth)
         }
     }
 
-    private var effortPicker: some View {
+    /// A group rendered as a segmented control, with an optional "Default".
+    private func segmentedGroup(_ group: OptionGroup,
+                                selection: Binding<String?>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionLabel("EFFORT")
-            Picker("", selection: Binding(
-                get: { store.effort },
-                set: { store.effort = $0 })) {
-                Text(EffortLevel.unsetLabel).tag(EffortLevel?.none)
-                ForEach(EffortLevel.allCases) { level in
-                    Text(level.displayName).tag(EffortLevel?.some(level))
+            SectionLabel(group.label)
+            Picker("", selection: selection) {
+                if group.allowsUnset {
+                    Text("Default").tag(String?.none)
+                }
+                ForEach(group.options) { option in
+                    Text(option.displayName).tag(String?.some(option.id))
                 }
             }
             .pickerStyle(.segmented)
@@ -532,10 +557,10 @@ private struct LaunchPanel: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .keyboardShortcut(.return, modifiers: [])
-            .disabled(store.claudePath == nil)
+            .disabled(store.selectedToolPath == nil)
 
-            if store.claudePath == nil {
-                Label("The `claude` command wasn't found on this machine.",
+            if store.selectedToolPath == nil {
+                Label("The `\(store.selectedTool.binary)` command wasn't found on this machine.",
                       systemImage: "exclamationmark.circle")
                     .font(.system(size: 11))
                     .foregroundStyle(.red)
