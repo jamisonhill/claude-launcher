@@ -1,38 +1,39 @@
-# Resume — Claude Launcher
+# Resume — OWL — AI Launcher
 
-**Paused:** 2026-08-03 · **Reason:** v1.0.3 published; installed copy not yet upgraded
-**Phase/Task:** Phase 6 — theme trim and resume-note summary both shipped
-**Tree:** clean · **Last commit:** `043fafc` Show where each project left off, under its path
+**Paused:** 2026-08-15 · **Reason:** rebrand + multi-tool done; 1.0.5 not cut yet
+**Phase/Task:** Phase 7 — code complete, release and deploy pending
+**Tree:** clean · **Last commit:** `77ca534` Rebrand to OWL — AI Launcher
 
 ## State
-- **v1.0.3 is released and contains both changes** (`c3c7aa4` themes, `043fafc`
-  resume notes). Tag pushed, GitHub release live, tap cask updated.
-- **`/Applications/ClaudeLauncher.app` is still the Jul 27 build.** The dev build
-  at `dist/` has the new behaviour; the installed copy does not. This caused a
-  full "the feature doesn't work" round-trip this session.
-- Theme picker offers exactly five dark profiles: Clear Dark, Grass, Homebrew,
-  Ocean, Red Sands. Verified in the running app.
-- Resume-note summary verified against all 38 `.planning/RESUME.md` files under
-  `~/Ai` — 24 next-step, 13 context, 1 blocked (`cognito`). Amber blocked banner
-  confirmed on screen.
-- No automated tests exist. Both features were verified by compiling the real
-  types into a throwaway probe binary and by screenshotting the app.
+- Multi-tool support ships: Claude Code and Gemini CLI built in, custom tools
+  for anything else. Verified in the running app — the panel swaps to Gemini's
+  Approval Mode and drops Model/Effort/First Command.
+- Rebranded to **OWL — AI Launcher** everywhere public. The support folder,
+  bundle id, SwiftPM target and GitHub repo keep the old name on purpose.
+- **Both commits are already on `origin/main`.** Not by a hook — nothing in
+  this repo pushes automatically, so assume it was pushed by hand.
+- **The website is committed but not deployed, and points at
+  `OWL-AI-Launcher-1.0.5.dmg`, which returns 404.** No release exists yet.
+- `/Applications` still holds the old `ClaudeLauncher.app` 1.0.4. The new
+  bundle is only at `dist/OWL — AI Launcher.app`.
+- Unpushed elsewhere: `llc` 13 commits, `bug-reporting` 1 commit.
 
 ## Next action
-1. `brew upgrade --cask claude-launcher` — then relaunch from Spotlight and
-   confirm the five themes and the summary line are present in the installed app.
-2. Homebrew records `1.0.1` installed while the app reported `1.0.2`, so
-   something overwrote `/Applications` outside brew. If the upgrade balks,
-   `brew reinstall --cask claude-launcher`.
-3. `-n/--name` flag — sets session name and Terminal window title.
+1. `./publish.sh 1.0.5` — builds, notarizes, tags, releases, rewrites the tap
+   cask as `owl-ai-launcher` and deletes the old `claude-launcher.rb`.
+2. `cd ~/Ai/Personal/llc/website && ./deploy.sh` — **only after step 1**, or the
+   download button 404s. Needs the NAS sudo password.
+3. Load https://obedworks.com/apps/owl/ and check the download works and the
+   counter still reads (it queries the repo's releases, not the app name).
+4. `git -C ~/Ai/Personal/apps/bug-reporting push` — sends the 500-not-502 fix
+   to GHCR; Watchtower picks it up within ~5 min.
 
 ## Gotchas
-- The cask is **`claude-launcher`**, not `claudelauncher`.
-- Never `./build.sh --install` while the Homebrew copy is in `/Applications`;
-  that is what desynced the versions above. Dev builds run from `dist/`.
-- Don't drive the app with System Events keystrokes — a stray Return hit Launch
-  and started a real session this session. `set selected of row N of outline 1`
-  works; `click at {x, y}` silently does not change SwiftUI selection.
-- Only 1 of 38 notes uses an explicit `Blocked:` label. Several are blocked in
-  substance ("Nothing until Apple responds") and show as **Next**. Writing
-  `Blocked:` in the note is the reliable fix; inferring intent is not.
+- **Publish before deploy.** The order is the whole trap in this pause.
+- Never rename `~/Library/Application Support/ClaudeLauncher` — it holds the
+  44-project library, and nothing in the app looks for another name.
+- The cask token changed to `owl-ai-launcher`; the old one stops working.
+- After deploy, `imazing` and `power-automate` in the bug tracker will start
+  failing loudly instead of showing empty — neither repo exists on GitHub.
+- Don't drive the app with `click at {x, y}`; it silently misses SwiftUI
+  controls. `click radio button N of radio group M …` works.

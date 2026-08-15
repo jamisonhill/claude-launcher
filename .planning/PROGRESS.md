@@ -1,73 +1,51 @@
-# Claude Launcher — Progress
+# OWL — AI Launcher — Progress
 
-A native macOS GUI for starting Claude Code sessions in Terminal.
-Repo: https://github.com/jamisonhill/claude-launcher (public, MIT)
+A native macOS GUI for starting AI coding sessions in Terminal.
+Repo: https://github.com/jamisonhill/claude-launcher (public, MIT — repo name
+kept through the rebrand; the download counter reads from its releases)
 
-**Status: v1.0.3 published. `/Applications` is still on the old build until
-`brew upgrade --cask claude-launcher` runs.**
+**Status: rebranded and multi-tool in code, both pushed. No 1.0.5 release cut
+yet, so the website and the tap still describe an app that isn't downloadable.**
 
 ---
 
-## Phase 1: Core launcher [COMPLETE]
-- [x] SwiftUI app, SwiftPM + hand-assembled .app bundle (`build.sh`)
-- [x] Project sidebar, model picker (Opus / Fable / Sonnet / Haiku)
-- [x] Launch via generated `.command` script opened by Terminal.app
-      (deliberately not AppleScript — Automation permission is tied to the
-      code signature and would re-prompt on every rebuild)
-- [x] `--dangerously-skip-permissions` toggle, on by default
+## Phase 1 — Core launcher [COMPLETE]
+## Phase 2 — Favorites and collapsible sections [COMPLETE]
+## Phase 3 — Sidebar redesign [COMPLETE — superseded by Phase 4]
+## Phase 4 — Curated library, sections, themes, flags [COMPLETE]
+## Phase 5 — Distribution: signing, notarization, tap [COMPLETE]
+## Phase 6 — Polish: icon, theme trim, resume notes, first command [COMPLETE]
 
-## Phase 2: Favorites and collapsible sections [COMPLETE]
-- [x] Star to favorite; drag to reorder; ⌘D
-- [x] `Section(isExpanded:)` collapsible sections, state persisted
-- [x] Raised deployment target to macOS 14 (required by that API)
-
-## Phase 3: Sidebar redesign after UX/UI review [COMPLETE — superseded by Phase 4]
-- [x] Native `.searchable()`; refresh/collapse moved to the toolbar
-- [x] Star space reserved, opacity-only hover (was reflowing row text)
-- [x] Marker-based discovery — **later found to be the wrong model**
-
-## Phase 4: Curated library, sections, themes, flags [COMPLETE]
-- [x] **Fixed:** marker filtering silently hid real projects
-      (`MHIT/DATA-ANALYTICS/exec-dashboard` — docs and schemas, no `.git`)
-- [x] Setup sheet lists *every* folder; markers only pre-tick boxes
-- [x] Container heuristic: a marker-less folder with 2+ marker-bearing
-      children reads as a container, exactly 1 as the project itself
-- [x] User-created, user-named sidebar sections + Unsorted
-- [x] Terminal colour themes from installed Terminal profiles
-- [x] `--permission-mode` picker (replaced the binary toggle) and `--effort`
-
-## Phase 5: Distribution [COMPLETE]
-- [x] `release.sh` — Developer ID signing, hardened runtime, notarize, staple
-- [x] `publish.sh` — one command: build → notarize → tag → release → cask
-- [x] Public repo + MIT license; GitHub Actions build check (green)
-- [x] Homebrew tap `jamisonhill/homebrew-tap`
-- [x] v1.0.0 notarized (Accepted), published, **installed from brew and
-      launched with no Gatekeeper prompt**
-
-## Phase 6: Optional polish [IN PROGRESS]
-- [x] **App icon** — `Icon/make-icon.swift`, regenerated on every build.
-      Each size drawn natively; downscaling 1024px art turned 16px into a
-      smudge. Shipped as v1.0.1.
-- [x] **Theme picker trimmed to five dark profiles** — filters on measured
-      background luminance, then farthest-point selection on colour so two
-      pure-black profiles (Homebrew, Pro) can't both take a slot. Fixed
-      `installedPrefix` matching only an em dash while every profile the app
-      ever installed used a hyphen, which is what produced
-      `Claude - Claude - Clear Dark`.
-- [x] **Resume-note summary** under the project path — parses
-      `.planning/RESUME.md` for a blocker, else the first still-open next
-      action, else Reason/Status. Verified against all 38 notes under `~/Ai`.
-- [x] **First-command picker** — None / `/start` / `/resume-work`, run as the
-      session's opening prompt. Also fixed a false BLOCKED reading: a wrapped
-      continuation line starting with `` `Blocked:` `` was matching, so this
-      project's own note about blockers marked it blocked.
-- [ ] ← PAUSED HERE Run `brew upgrade --cask claude-launcher` so the installed
-      copy matches the shipped version (needs a new release for the above)
-- [ ] `-n/--name` flag (sets session name *and* Terminal window title —
-      pairs naturally with the colour themes)
-- [ ] Session control: `--continue` / `--resume` / `--fork-session`
-- [ ] Advanced disclosure: worktree, add-dir, agent, ide, safe-mode, verbose
-- [ ] No automated tests exist; scanner heuristics are the obvious candidate
+## Phase 7 — Multi-tool support and rebrand [IN PROGRESS]
+- [x] **Tools are described, not assumed** — `AITools.swift` holds each CLI's
+      binary and option groups; the panel renders only what the selected tool
+      declares, so no code path can emit a flag that tool would reject.
+- [x] Built-ins: Claude Code (unchanged flags) and Gemini CLI
+      (`--approval-mode` only — its values are enumerated by `gemini --help`;
+      `-m` exists but its accepted model names are not published, so a picker
+      would be guesswork). Nothing in the app is transcribed from docs.
+- [x] Custom tools + per-tool extra arguments in Settings → AI Tools. This is
+      the route for Codex, which is **not installed on this Mac** and so could
+      not be verified even once.
+- [x] Detection: a tool appears only once its binary resolves. `command -v` can
+      name a path that doesn't exist, so the result is checked for
+      executability rather than trusted.
+- [x] Backward compatible: option ids match the old enum raw values, and Claude
+      keeps the bare project-path key while other tools get a suffixed one.
+      Verified against the real 44-project library.
+- [x] **Rebrand to OWL — AI Launcher** across every public surface: bundle,
+      Dock, window title, DMG, cask, website, README.
+- [x] Deliberately *not* renamed: SwiftPM target, bundle id, and
+      `~/Library/Application Support/ClaudeLauncher` (renaming it would orphan
+      every existing library), and the GitHub repo.
+- [ ] ← PAUSED HERE **`./publish.sh 1.0.5`** — must run before the site is
+      deployed; the page already links to `OWL-AI-Launcher-1.0.5.dmg` (404).
+- [ ] Deploy the website, then confirm the download and the counter.
+- [ ] Push `bug-reporting` (1 commit) so the 500-not-502 fix reaches the NAS.
+- [ ] `-n/--name` flag (session name *and* Terminal window title).
+- [ ] Session control: `--continue` / `--resume` / `--fork-session`.
+- [ ] No automated tests exist; scanner and tool-flag building are the
+      obvious candidates.
 
 ---
 
@@ -76,11 +54,15 @@ Repo: https://github.com/jamisonhill/claude-launcher (public, MIT)
 - `./build.sh --install` overwrites the Homebrew-managed copy in
   `/Applications` and confuses `brew upgrade`. For dev work run `./build.sh`
   alone and launch from `dist/`.
-- The tap's cask is generated by `publish.sh`. Hand-edits to
-  `homebrew-tap/Casks/claude-launcher.rb` are overwritten on the next release;
-  edit `Casks/claude-launcher.rb.template` here instead.
-- Picking a theme installs `Claude — <name>` profiles into Terminal. The
-  user's own profiles are read but never modified. Roughly a dozen legacy
-  `Claude - <name>` profiles from the hyphen era are still in Terminal →
-  Settings → Profiles, along with `ThemeTest2`, `ThemeTest3` and `quoteprobe`
-  from dev. They're filtered out of the picker now; deleting them is cosmetic.
+- `build.sh` still hardcodes `VERSION="1.0.2"`, so local dev builds misreport
+  their version. Releases are unaffected — `publish.sh` passes the real one.
+- The tap's cask is generated by `publish.sh`. Edit
+  `Casks/owl-ai-launcher.rb.template` here, never the copy in the tap.
+  Publishing 1.0.5 also deletes the tap's old `claude-launcher.rb`.
+- Picking a theme installs `OWL — <name>` profiles into Terminal. Legacy
+  `Claude — <name>` and `Claude - <name>` profiles from before the rename are
+  still there; all are filtered out of the picker, and deleting them is
+  cosmetic. That filter is load-bearing — an unmatched profile gets offered as
+  a base for a new one, which is what produced `Claude - Claude - Clear Dark`.
+- Codex support is unverified by design. If it's ever installed here, promote
+  it from a custom tool to a built-in and check its flags first.
