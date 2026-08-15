@@ -27,5 +27,5 @@ jobs:
 
       - name: Verify the bundle launches as a bundle
         run: |
-          test -x dist/ClaudeLauncher.app/Contents/MacOS/ClaudeLauncher
-          plutil -lint dist/ClaudeLauncher.app/Contents/Info.plist
+          test -x "dist/OWL — AI Launcher.app/Contents/MacOS/ClaudeLauncher"
+          plutil -lint "dist/OWL — AI Launcher.app/Contents/Info.plist"

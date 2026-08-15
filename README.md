@@ -1,4 +1,4 @@
-# Claude Launcher
+# OWL — AI Launcher
 
 A native macOS app for starting AI coding sessions in Terminal. Pick a project,
 pick a tool, set the options, hit Launch — a Terminal window opens in that
@@ -20,7 +20,7 @@ dependencies.
 ## Distribution
 
 ```bash
-./release.sh             # signed + hardened, produces dist/Claude Launcher.dmg
+./release.sh             # signed + hardened, produces dist/OWL-AI-Launcher-<version>.dmg
 ./release.sh --notarize   # also submits to Apple and staples the ticket
 ```
 
@@ -257,6 +257,10 @@ clear dialog instead of a window that flashes "command not found" and vanishes.
 **Settings** (⌘,) manages your main folders and re-runs the project picker.
 
 Four JSON files in `~/Library/Application Support/ClaudeLauncher/`:
+
+The folder still carries the old name on purpose. It was called Claude
+Launcher until 1.0.5, and renaming the folder during the rebrand would have
+orphaned every existing library for the sake of a path nobody looks at.
 
 - **`config.json`** — main folders to search, and exclusions.
 - **`library.json`** — your curated projects and your sections.

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds a signed, notarized, distributable ClaudeLauncher.dmg.
+# Builds a signed, notarized, distributable OWL-AI-Launcher DMG.
 #
 #   ./release.sh            build + sign only (no Apple submission)
 #   ./release.sh --notarize  also submit to Apple and staple the ticket
@@ -16,8 +16,11 @@
 # Passwords. Nothing here ever sees your real credentials.
 set -eu
 
-APP_NAME="ClaudeLauncher"
-DISPLAY_NAME="Claude Launcher"
+# PRODUCT_NAME is the SwiftPM target (the compiled binary, never seen).
+# APP_NAME is the bundle Finder and the Dock show.
+PRODUCT_NAME="ClaudeLauncher"
+APP_NAME="OWL — AI Launcher"
+DISPLAY_NAME="OWL — AI Launcher"
 BUNDLE_ID="com.jamisonhill.claudelauncher"
 VERSION="${VERSION:-1.0.2}"
 TEAM_ID="HFAWAP3F3Z"
@@ -27,16 +30,16 @@ KEYCHAIN_PROFILE="claude-launcher"
 cd "$(dirname "$0")"
 DIST="dist"
 APP="$DIST/$APP_NAME.app"
-DMG="$DIST/Claude-Launcher-$VERSION.dmg"
+DMG="$DIST/OWL-AI-Launcher-$VERSION.dmg"
 
 echo "==> Compiling (release)…"
 swift build -c release
-BINARY="$(swift build -c release --show-bin-path)/$APP_NAME"
+BINARY="$(swift build -c release --show-bin-path)/$PRODUCT_NAME"
 
 echo "==> Assembling $APP …"
 rm -rf "$APP" "$DMG"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BINARY" "$APP/Contents/MacOS/$APP_NAME"
+cp "$BINARY" "$APP/Contents/MacOS/$PRODUCT_NAME"
 
 # Regenerate the icon from source so it can never drift from Icon/make-icon.swift.
 if [ -f Icon/make-icon.swift ]; then
@@ -52,7 +55,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
     <key>CFBundleName</key>              <string>$DISPLAY_NAME</string>
     <key>CFBundleDisplayName</key>       <string>$DISPLAY_NAME</string>
-    <key>CFBundleExecutable</key>        <string>$APP_NAME</string>
+    <key>CFBundleExecutable</key>        <string>$PRODUCT_NAME</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundleIconName</key>          <string>AppIcon</string>
     <key>CFBundleIdentifier</key>        <string>$BUNDLE_ID</string>

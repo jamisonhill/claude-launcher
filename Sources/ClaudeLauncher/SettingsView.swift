@@ -11,7 +11,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Main Folders")
                     .font(.system(size: 13, weight: .semibold))
-                Text("Claude Launcher searches these folders when you choose projects.")
+                Text("OWL searches these folders when you choose projects.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -70,7 +70,7 @@ struct SettingsView: View {
                 Text("""
                      Themes come from the profiles installed in Terminal — the five \
                      most distinct dark ones. Picking one installs a copy named \
-                     "Claude — <name>" so your own profiles are never modified. \
+                     "OWL — <name>" so your own profiles are never modified. \
                      Manage them in Terminal → Settings → Profiles.
                      """)
                     .font(.system(size: 11))

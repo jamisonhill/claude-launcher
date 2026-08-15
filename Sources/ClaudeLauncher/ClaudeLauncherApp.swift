@@ -6,7 +6,7 @@ struct ClaudeLauncherApp: App {
     @StateObject private var store = LauncherStore()
 
     var body: some Scene {
-        Window("Claude Launcher", id: "main") {
+        Window("OWL — AI Launcher", id: "main") {
             ContentView()
                 .environmentObject(store)
                 .frame(minWidth: 840, minHeight: 620)

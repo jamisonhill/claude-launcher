@@ -1,15 +1,20 @@
 #!/bin/bash
-# Builds ClaudeLauncher and wraps the binary in a real macOS .app bundle.
+# Builds the app and wraps the binary in a real macOS .app bundle.
 #
-#   ./build.sh            build into ./dist/ClaudeLauncher.app
+#   ./build.sh            build into "./dist/OWL — AI Launcher.app"
 #   ./build.sh --install  also copy it to /Applications
+#
+# PRODUCT_NAME is the SwiftPM target and stays ClaudeLauncher — it names the
+# compiled binary and nothing a user ever sees. APP_NAME is the bundle, and is
+# very much seen: it's what Finder, the Dock and Spotlight show.
 #
 # set -e stops the script on the first failure so we never ship a half-built
 # bundle; set -u catches typos in variable names.
 set -eu
 
-APP_NAME="ClaudeLauncher"
-DISPLAY_NAME="Claude Launcher"
+PRODUCT_NAME="ClaudeLauncher"
+APP_NAME="OWL — AI Launcher"
+DISPLAY_NAME="OWL — AI Launcher"
 BUNDLE_ID="com.jamisonhill.claudelauncher"
 VERSION="1.0.2"
 
@@ -20,7 +25,7 @@ APP="$DIST/$APP_NAME.app"
 echo "==> Compiling (release)…"
 swift build -c release
 
-BINARY="$(swift build -c release --show-bin-path)/$APP_NAME"
+BINARY="$(swift build -c release --show-bin-path)/$PRODUCT_NAME"
 if [ ! -x "$BINARY" ]; then
   echo "Build produced no executable at $BINARY" >&2
   exit 1
@@ -29,7 +34,7 @@ fi
 echo "==> Assembling $APP …"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BINARY" "$APP/Contents/MacOS/$APP_NAME"
+cp "$BINARY" "$APP/Contents/MacOS/$PRODUCT_NAME"
 
 # Regenerate the icon from source so it can never drift from Icon/make-icon.swift.
 if [ -f Icon/make-icon.swift ]; then
@@ -47,7 +52,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
     <key>CFBundleName</key>              <string>$DISPLAY_NAME</string>
     <key>CFBundleDisplayName</key>       <string>$DISPLAY_NAME</string>
-    <key>CFBundleExecutable</key>        <string>$APP_NAME</string>
+    <key>CFBundleExecutable</key>        <string>$PRODUCT_NAME</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundleIconName</key>          <string>AppIcon</string>
     <key>CFBundleIdentifier</key>        <string>$BUNDLE_ID</string>

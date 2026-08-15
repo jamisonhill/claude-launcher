@@ -19,7 +19,7 @@ import Foundation
 // them — see `availableProfileNames`.
 //
 // One wrinkle worth knowing: opening a `.terminal` file *installs* it as a
-// profile. We therefore emit a small fixed set named "Claude — <theme>" and
+// profile. We therefore emit a small fixed set named "OWL — <theme>" and
 // rewrite those in place, rather than one throwaway profile per launch. The
 // user's own profiles are read but never modified.
 
@@ -27,19 +27,27 @@ enum TerminalThemes {
 
     /// Prefix for every profile this app installs, so ours are obvious in
     /// Terminal → Settings → Profiles and never collide with the originals.
-    static let installedPrefix = "Claude — "
+    static let installedPrefix = "OWL — "
+
+    /// Every prefix this app has ever installed profiles under. The app was
+    /// called Claude Launcher before it could launch anything else, and those
+    /// profiles are still sitting in Terminal on machines that ran it.
+    private static let historicalNames = ["OWL", "Claude"]
 
     /// Whether a profile is one this app installed, and so must never be
     /// offered as a theme to base a new one on.
     ///
-    /// Matching on `installedPrefix` alone is not enough. Earlier versions
-    /// separated with a hyphen rather than an em dash, so profiles named
-    /// "Claude - Ocean" survive on machines that ran them — and being unmatched
-    /// is what let them be re-picked and re-wrapped into "Claude - Claude -
-    /// Ocean". Any dash the name has ever used has to count.
+    /// Matching on `installedPrefix` alone is not enough, in two directions.
+    /// Earlier versions separated with a hyphen rather than an em dash, so
+    /// profiles named "Claude - Ocean" survive on machines that ran them — and
+    /// being unmatched is what let them be re-picked and re-wrapped into
+    /// "Claude - Claude - Ocean". The rename adds the same hazard under a new
+    /// word, so every name and every dash the app has ever used has to count.
     static func isInstalledByApp(_ name: String) -> Bool {
         let separators = ["—", "–", "-"]
-        return separators.contains { name.hasPrefix("Claude \($0) ") }
+        return historicalNames.contains { appName in
+            separators.contains { name.hasPrefix("\(appName) \($0) ") }
+        }
     }
 
     /// How many themes the picker offers. A row of swatches is a glance-level
@@ -58,7 +66,7 @@ enum TerminalThemes {
     /// Three filters, each earning its place:
     ///
     /// - Profiles this app installed are dropped, otherwise the picker would
-    ///   slowly fill with "Claude — Claude — Ocean" style entries.
+    ///   slowly fill with "OWL — OWL — Ocean" style entries.
     /// - Light profiles are dropped outright.
     /// - The rest are thinned to the most visually distinct few. Terminal ships
     ///   several profiles with pure black backgrounds (Homebrew and Pro among

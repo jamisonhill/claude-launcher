@@ -2,13 +2,16 @@ import Foundation
 
 // MARK: - On-disk state
 //
-// Three JSON files in ~/Library/Application Support/ClaudeLauncher/ :
+// Four JSON files in ~/Library/Application Support/ClaudeLauncher/ :
+// (the folder keeps the old name deliberately — renaming it at the rebrand
+// would have orphaned every existing library, and nobody sees it)
 //
 //   config.json   – which folders to scan for candidates
 //   library.json  – the curated projects and the user's sidebar sections
 //   prefs.json    – per-project launch choices, favorites, recency
+//   tools.json    – custom AI tools, per-tool extra args, disabled built-ins
 //
-// All three decode field-by-field with `decodeIfPresent`, so adding a setting
+// All four decode field-by-field with `decodeIfPresent`, so adding a setting
 // in a later version can't make an older file fail to load and silently reset
 // somebody's configuration.
 

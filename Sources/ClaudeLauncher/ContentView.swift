@@ -770,12 +770,12 @@ private struct EmptyStatePanel: View {
                 .font(.system(size: 34))
                 .foregroundStyle(.tertiary)
 
-            Text(store.needsSetup ? "Welcome to Claude Launcher" : "Select a project")
+            Text(store.needsSetup ? "Welcome to OWL" : "Select a project")
                 .font(.system(size: 15, weight: .medium))
 
             Text(store.needsSetup
                  ? "Choose the folder your projects live in. You'll get a list of everything inside it and pick which ones are real projects."
-                 : "Pick a project on the left to start a Claude Code session there.")
+                 : "Pick a project on the left to start a session there.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

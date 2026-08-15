@@ -16,7 +16,7 @@ VERSION="${1:?usage: ./publish.sh <version>   e.g. ./publish.sh 1.0.1}"
 REPO="jamisonhill/claude-launcher"
 TAP_REPO="jamisonhill/homebrew-tap"
 TAP_DIR="${TAP_DIR:-$HOME/Ai/Personal/apps/homebrew-tap}"
-DMG="dist/Claude-Launcher-$VERSION.dmg"
+DMG="dist/OWL-AI-Launcher-$VERSION.dmg"
 
 cd "$(dirname "$0")"
 
@@ -40,7 +40,7 @@ git push origin main --tags
 echo "==> Creating the GitHub release…"
 gh release create "v$VERSION" "$DMG" \
   --repo "$REPO" \
-  --title "Claude Launcher $VERSION" \
+  --title "OWL — AI Launcher $VERSION" \
   --generate-notes \
   || gh release upload "v$VERSION" "$DMG" --repo "$REPO" --clobber
 
@@ -53,12 +53,16 @@ if [ ! -d "$TAP_DIR" ]; then
 fi
 mkdir -p "$TAP_DIR/Casks"
 sed -e "s/__VERSION__/$VERSION/g" -e "s/__SHA256__/$SHA/g" \
-    Casks/claude-launcher.rb.template > "$TAP_DIR/Casks/claude-launcher.rb"
+    Casks/owl-ai-launcher.rb.template > "$TAP_DIR/Casks/owl-ai-launcher.rb"
 
-git -C "$TAP_DIR" add Casks/claude-launcher.rb
-git -C "$TAP_DIR" commit -m "claude-launcher $VERSION" || echo "(cask unchanged)"
+# The cask was called claude-launcher before the rename. Leaving it behind would
+# keep serving a cask whose DMG no longer contains an app by that name.
+rm -f "$TAP_DIR/Casks/claude-launcher.rb"
+
+git -C "$TAP_DIR" add -A Casks
+git -C "$TAP_DIR" commit -m "owl-ai-launcher $VERSION" || echo "(cask unchanged)"
 git -C "$TAP_DIR" push
 
 echo
 echo "==> Published. Install with:"
-echo "      brew install --cask $TAP_REPO/claude-launcher"
+echo "      brew install --cask $TAP_REPO/owl-ai-launcher"
