@@ -140,7 +140,7 @@ enum Launcher {
     /// Quotes only tokens that actually need it.
     ///
     /// The generated script quotes everything, which is correct but reads
-    /// badly in the preview ('--model' 'claude-opus-5'). Plain flags are left
+    /// badly in the preview ('--model' 'opus'). Plain flags are left
     /// bare; anything with whitespace or shell metacharacters — which the
     /// user's own extra arguments may well contain — is quoted, so the preview
     /// still shows exactly how the shell will read the line.

@@ -98,14 +98,23 @@ extension AITool {
             "~/.bun/bin/claude",
             "~/.npm-global/bin/claude"
         ],
+        // Model values are family *aliases*, not pinned ids. `claude --help`
+        // documents --model as taking "an alias for the latest model (e.g.
+        // 'fable', 'opus', or 'sonnet') or a model's full name", and the CLI
+        // resolves a bare family name to the newest release in that family.
+        //
+        // Pinning exact ids is what the first version did, and it rotted: the
+        // app shipped "claude-opus-5" and kept launching it after Opus 5.5
+        // came out. An alias means picking Opus always gets today's Opus, with
+        // no release of this app required when Anthropic ships the next one.
         modelGroup: OptionGroup(
             label: "MODEL",
             flag: "--model",
             options: [
-                ToolOption(id: "opus",   displayName: "Opus",   subtitle: "Most capable",     flagValue: "claude-opus-5"),
-                ToolOption(id: "fable",  displayName: "Fable",  subtitle: "Creative writing", flagValue: "claude-fable-5"),
-                ToolOption(id: "sonnet", displayName: "Sonnet", subtitle: "Balanced",         flagValue: "claude-sonnet-5"),
-                ToolOption(id: "haiku",  displayName: "Haiku",  subtitle: "Fastest",          flagValue: "claude-haiku-4-5-20251001")
+                ToolOption(id: "opus",   displayName: "Opus",   subtitle: "Most capable",     flagValue: "opus"),
+                ToolOption(id: "fable",  displayName: "Fable",  subtitle: "Creative writing", flagValue: "fable"),
+                ToolOption(id: "sonnet", displayName: "Sonnet", subtitle: "Balanced",         flagValue: "sonnet"),
+                ToolOption(id: "haiku",  displayName: "Haiku",  subtitle: "Fastest",          flagValue: "haiku")
             ],
             defaultOptionID: "opus"
         ),
