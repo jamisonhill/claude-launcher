@@ -111,10 +111,10 @@ extension AITool {
             label: "MODEL",
             flag: "--model",
             options: [
-                ToolOption(id: "opus",   displayName: "Opus",   subtitle: "Most capable",     flagValue: "opus"),
-                ToolOption(id: "fable",  displayName: "Fable",  subtitle: "Creative writing", flagValue: "fable"),
-                ToolOption(id: "sonnet", displayName: "Sonnet", subtitle: "Balanced",         flagValue: "sonnet"),
-                ToolOption(id: "haiku",  displayName: "Haiku",  subtitle: "Fastest",          flagValue: "haiku")
+                ToolOption(id: "opus",   displayName: "Opus",   subtitle: "Best for most work",    flagValue: "opus"),
+                ToolOption(id: "fable",  displayName: "Fable",  subtitle: "Most capable, slowest", flagValue: "fable"),
+                ToolOption(id: "sonnet", displayName: "Sonnet", subtitle: "Fast everyday work",    flagValue: "sonnet"),
+                ToolOption(id: "haiku",  displayName: "Haiku",  subtitle: "Fastest, simple tasks", flagValue: "haiku")
             ],
             defaultOptionID: "opus"
         ),
