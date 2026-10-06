@@ -1,39 +1,40 @@
 # Resume — OWL — AI Launcher
 
-**Paused:** 2026-08-15 · **Reason:** rebrand + multi-tool done; 1.0.5 not cut yet
-**Phase/Task:** Phase 7 — code complete, release and deploy pending
-**Tree:** clean · **Last commit:** `77ca534` Rebrand to OWL — AI Launcher
+**Paused:** 2026-10-05 · **Reason:** 1.0.6 is built but Apple can't notarize it yet
+**Phase/Task:** Phase 7 — model selector done; 1.0.6 blocked on Apple
+**Tree:** clean · **Last commit:** `a5cc03c` Describe each model by what it's good for
 
 ## State
-- Multi-tool support ships: Claude Code and Gemini CLI built in, custom tools
-  for anything else. Verified in the running app — the panel swaps to Gemini's
-  Approval Mode and drops Model/Effort/First Command.
-- Rebranded to **OWL — AI Launcher** everywhere public. The support folder,
-  bundle id, SwiftPM target and GitHub repo keep the old name on purpose.
-- **Both commits are already on `origin/main`.** Not by a hook — nothing in
-  this repo pushes automatically, so assume it was pushed by hand.
-- **The website is committed but not deployed, and points at
-  `OWL-AI-Launcher-1.0.5.dmg`, which returns 404.** No release exists yet.
-- `/Applications` still holds the old `ClaudeLauncher.app` 1.0.4. The new
-  bundle is only at `dist/OWL — AI Launcher.app`.
-- Unpushed elsewhere: `llc` 13 commits, `bug-reporting` 1 commit.
+- **The model selector now follows the newest model per family.** `--model` is
+  passed the alias (`opus`, `fable`, `sonnet`, `haiku`), which the CLI resolves
+  to the latest release; the old pinned ids had gone a generation stale. No app
+  release is needed when Anthropic ships the next model.
+- Model subtitles rewritten so they stop pointing at the wrong choice.
+- **1.0.5 is live everywhere** — release, DMG, tap, and website. The last pause
+  note said no release existed; it was published minutes after that note.
+- **1.0.6 is built, signed and verified** at
+  `/Users/jamisonhill/Ai/Personal/apps/claudeLauncher/dist/OWL-AI-Launcher-1.0.6.dmg`
+  — not notarized, so not publishable.
+- **Blocked:** notarization returns `403 A required agreement is missing or has
+  expired` while Apple clears the personal→company account conversion. The
+  keychain credential is fine — a bad one returns 401. This is a wait, not a fix.
 
 ## Next action
-1. `./publish.sh 1.0.5` — builds, notarizes, tags, releases, rewrites the tap
-   cask as `owl-ai-launcher` and deletes the old `claude-launcher.rb`.
-2. `cd ~/Ai/Personal/llc/website && ./deploy.sh` — **only after step 1**, or the
-   download button 404s. Needs the NAS sudo password.
-3. Load https://obedworks.com/apps/owl/ and check the download works and the
-   counter still reads (it queries the repo's releases, not the app name).
-4. `git -C ~/Ai/Personal/apps/bug-reporting push` — sends the 500-not-502 fix
-   to GHCR; Watchtower picks it up within ~5 min.
+1. **Wait for Apple.** Re-check with
+   `xcrun notarytool history --keychain-profile claude-launcher` — anything other
+   than a 403 means it's cleared. Accept any pending agreement at
+   https://developer.apple.com/account (team `HFAWAP3F3Z`) if one is shown.
+2. `cd /Users/jamisonhill/Ai/Personal/apps/claudeLauncher && ./publish.sh 1.0.6`
+3. Bump `/Users/jamisonhill/Ai/Personal/llc/website/src/content/apps/owl.md`
+   lines 12–13 from `1.0.5` to `1.0.6` (both `version:` and `assetName:`), then
+   `cd /Users/jamisonhill/Ai/Personal/llc/website && ./deploy.sh`. Needs the NAS
+   sudo password.
 
 ## Gotchas
-- **Publish before deploy.** The order is the whole trap in this pause.
+- **Publish before deploy**, or the download button 404s.
+- **Don't run `./publish.sh 1.0.5`.** It force-moves the tag and clobbers a DMG
+  that people have already downloaded. 1.0.6 is the next version.
 - Never rename `~/Library/Application Support/ClaudeLauncher` — it holds the
   44-project library, and nothing in the app looks for another name.
-- The cask token changed to `owl-ai-launcher`; the old one stops working.
-- After deploy, `imazing` and `power-automate` in the bug tracker will start
-  failing loudly instead of showing empty — neither repo exists on GitHub.
 - Don't drive the app with `click at {x, y}`; it silently misses SwiftUI
   controls. `click radio button N of radio group M …` works.
