@@ -4,10 +4,10 @@ A native macOS GUI for starting AI coding sessions in Terminal.
 Repo: https://github.com/jamisonhill/claude-launcher (public, MIT — repo name
 kept through the rebrand; the download counter reads from its releases)
 
-**Status: 1.0.5 is live everywhere — release, tap, website. The model selector
-now tracks the newest model per family. 1.0.6 is built and signed but cannot be
-notarized: Apple has not cleared the account after the personal→company
-conversion.**
+**Status: 1.0.6 is live everywhere — release, DMG, tap and website, all
+verified against the live site. Apple's account block cleared on its own; the
+model selector tracks the newest model per family. Next up is the feature
+backlog: `-n/--name` and session control.**
 
 ---
 
@@ -51,12 +51,12 @@ conversion.**
       model it actually ran.
 - [x] Model subtitles rewritten — "Opus — Most capable" stopped being true once
       Fable shipped, and both subtitles were steering the pick wrong.
-- [ ] ← PAUSED HERE **`./publish.sh 1.0.6`** — **blocked, not merely pending.**
-      Notarization returns `403 A required agreement is missing or has expired`
-      while Apple clears the personal→company conversion. The keychain
-      credential is fine (a bad one gives 401). Nothing to do but wait.
-- [ ] Bump the website to 1.0.6 and deploy — **only after 1.0.6 publishes.**
-- [ ] `-n/--name` flag (session name *and* Terminal window title).
+- [x] **1.0.6 published** — notarization Accepted (`fc46f9d8`), stapled and
+      Gatekeeper-verified. The 403 agreement block cleared on Apple's side
+      while the work was paused; nothing here had to change to unblock it.
+- [x] Website bumped to 1.0.6 and deployed. Live download is byte-identical to
+      the notarized DMG (1,020,950 bytes), and the cask matches its sha256.
+- [ ] ← PAUSED HERE `-n/--name` flag (session name *and* Terminal window title).
 - [ ] Session control: `--continue` / `--resume` / `--fork-session`.
 - [ ] No automated tests exist; scanner and tool-flag building are the
       obvious candidates.
